@@ -126,7 +126,7 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
             const userId = data.userId || (data.project && data.project.id);
             if (userId) {
               console.log(`Checking for pending notifications after auth for user ${userId}`);
-              checkForPendingBotNotifications(ws, userId);
+              //checkForPendingBotNotifications(ws, userId);
             } else {
               console.log(`Cannot check for pending notifications: No user ID in auth message`);
             }
@@ -432,7 +432,7 @@ async function handleAuthentication(ws: WebSocket, data: any): Promise<void> {
     );
 
     // Check for any bot installations that happened while the user was offline
-    checkForPendingBotNotifications(ws, project.id);
+    //checkForPendingBotNotifications(ws, project.id);
 
     // Send initial data
     handleInitialConnection(ws, project);
