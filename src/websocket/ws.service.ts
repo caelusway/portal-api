@@ -978,7 +978,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
   switch (currentLevel) {
     case 1:
       return [
-        `**I'm excited to help you set up your research community!** Let me guide you through the process of creating your Discord server:\n`,
+        `**I'm excited to help you set up your research community!\n** Let me guide you through the process of creating your Discord server:\n`,
         `**1. Creating a Discord Server:**\n`,
         `- Go to Discord and click the **+** button on the left sidebar`,
         `- Choose **"Create a Server"** and follow the setup wizard`,
@@ -997,7 +997,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
       const membersNeeded = 4 - currentMembers;
       const botInstallationUrl = getBotInstallationUrl();
       return [
-        `**Great progress on setting up your community!** Here's how to reach Level 3:\n`,
+        `**Great progress on setting up your community!\n** Here's how to reach Level 3:\n`,
         `**1. Grow to 4+ Members** *(you need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} members)*:\n`,
         `- Share your Discord invite with researchers`,
         `- Host virtual events or discussions`,
@@ -1033,7 +1033,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
 
     case 4:
       return [
-        `🎉 **Congratulations on reaching Level 4!** This is a huge milestone for your BioDAO.\n`,
+        `🎉 **Congratulations on reaching Level 4!\n ** This is a huge milestone for your BioDAO.\n`,
         `The Bio team will reach out soon to discuss:\n`,
         `- Your research goals and vision`,
         `- Funding opportunities`,
