@@ -1599,6 +1599,9 @@ Once the bot is added, your Discord stats will be automatically tracked and will
     } catch (error) {
       console.error('Error getting AI guidance after Discord setup:', error);
     }
+    const latestProject = await ProjectService.getById(userId);
+    // Check and perform level up
+    await checkAndPerformLevelUp(latestProject, ws);
 
     return true;
   } catch (error) {
@@ -1710,6 +1713,12 @@ async function handleNftMinting(ws: WebSocket, userId: string, nftType: string):
 
     // Check if user has both NFTs and should level up
     await checkLevelUpConditions(userId, project.level, null, ws);
+
+    // In handleNftMinting, after NFT image generation and before calling checkAndPerformLevelUp
+    const latestProject = await ProjectService.getById(userId);
+    if (latestProject) {
+      await checkAndPerformLevelUp(latestProject, ws);
+    }
 
     return true;
   } catch (error) {
@@ -2305,6 +2314,9 @@ Continue growing your community and sharing valuable scientific content to progr
       }
     }
 
+    // Check and perform level up
+    await checkAndPerformLevelUp(project, ws);
+
     console.log(
       `Discord bot installation processed for user ${userId}, server: ${serverDetails.guildName || serverDetails.guildId}`
     );
@@ -2424,56 +2436,8 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
           );
         }
 
-        // Check if this should trigger a level up
-        if (project.level === 2 && memberCount >= 4) {
-          const newLevel = 3; // Define variable instead of hardcoding
-          await prisma.project.update({
-            where: { id: project.id },
-            data: { level: newLevel },
-          });
-
-          const levelUpMessage = {
-            content: `## Level ${newLevel} Unlocked! 🚀
-
-**Congratulations!** Your BioDAO community now has **${memberCount} members**. You've advanced to **Level ${newLevel}!**
-
-### New Level Requirements:
-- Increase to **10 community members** (currently: ${memberCount})
-- Share **25 scientific papers** in your Discord
-- Reach **100 quality messages** in your server
-
-Continue growing your community and sharing valuable scientific content to progress to Level 4!`,
-          };
-
-          await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
-
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(
-              JSON.stringify({
-                type: 'level_up',
-                level: newLevel,
-                message: levelUpMessage.content,
-                nextLevelRequirements: [
-                  'Grow your community to 10+ Discord members',
-                  'Share at least 25 scientific papers in your server',
-                  'Reach 100+ quality messages in your community',
-                ],
-              })
-            );
-          }
-
-          // Send level up email notification
-          if (project.email) {
-            try {
-              await sendLevelUpEmail(project.email, newLevel);
-              console.log(
-                `Level up email sent to ${project.email} for level ${newLevel} (triggered by guildCreate)`
-              );
-            } catch (emailError) {
-              console.error(`Error sending level up email for project ${project.id}:`, emailError);
-            }
-          }
-        }
+        // Check and perform level up
+        await checkAndPerformLevelUp(project, ws);
       }
 
       console.log(
@@ -2520,6 +2484,20 @@ async function checkAndUpdateUserLevel(project: any) {
           type: 'message',
           content: levelUpMessage,
           action: 'LEVEL_UP',
+          isFromAgent: true,
+        })
+      );
+      userConnection.send(
+        JSON.stringify({
+          type: 'level_up',
+          previousLevel: 2,
+          newLevel: 3,
+          message: levelUpMessage,
+          nextLevelRequirements: [
+            'Grow your community to 10+ Discord members',
+            'Share at least 25 scientific papers in your server',
+            'Reach 100+ quality messages in your community',
+          ],
         })
       );
     }
@@ -2556,6 +2534,20 @@ async function checkAndUpdateUserLevel(project: any) {
           type: 'message',
           content: levelUpMessage,
           action: 'LEVEL_UP',
+          isFromAgent: true,
+        })
+      );
+      userConnection.send(
+        JSON.stringify({
+          type: 'level_up',
+          previousLevel: 3,
+          newLevel: 4,
+          message: levelUpMessage,
+          nextLevelRequirements: [
+            'All requirements completed - congratulations!',
+            'The Bio team will contact you to schedule a call',
+            'You now have access to the full BioDAO sandbox',
+          ],
         })
       );
     }
