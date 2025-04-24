@@ -12,6 +12,7 @@ import { initDiscordBot } from './discord-bot';
 // Create express app
 const app = express();
 
+
 // Create HTTP server
 const server = http.createServer(app);
 
