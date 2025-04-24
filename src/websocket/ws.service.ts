@@ -1033,16 +1033,16 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
 
     case 4:
       return [
-        `🎉 **Congratulations on reaching Level 4!** This is a huge milestone for your BioDAO.\n`,
-        `The Bio team will reach out soon to discuss:\n`,
+        `🎉 **Congratulations on reaching Level 4!** This is a huge milestone for your BioDAO.`,
+        `The Bio team will reach out soon to discuss:`,
         `- Your research goals and vision`,
         `- Funding opportunities`,
         `- Advanced resources and support`,
-        `- Strategic guidance for growth\n`,
+        `- Strategic guidance for growth`,
         `**Prepare for your call by:**`,
         `1. Refining your research roadmap`,
         `2. Identifying key challenges`,
-        `3. Listing questions for the Bio team\n`,
+        `3. Listing questions for the Bio team`,
         `Meanwhile, enjoy full access to all platform features. Anything you'd like to focus on now?`,
       ].join('\n');
 
