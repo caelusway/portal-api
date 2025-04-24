@@ -163,13 +163,11 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
           case 'get_nfts': {
             // Fetch NFTs for the user from our database
             await handleGetNFTs(ws, data.userId);
-            await checkAndPerformLevelUp(data.userId, ws);
             break;
           }
           case 'fetch_discord': {
             // This will send Discord info back to the client if available
             await handleCheckDiscordStats(ws, data.userId);
-            await checkAndPerformLevelUp(data.userId, ws);
             break;
           }
           case 'bot_installed': {
@@ -180,7 +178,8 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
                 guildName: data.guildName,
                 memberCount: data.memberCount,
               });
-              await checkAndPerformLevelUp(data.userId, ws);
+              const latestProject = await ProjectService.getById(data.userId);
+              await checkAndPerformLevelUp(latestProject, ws);
             } else {
               console.error('Invalid bot_installed message format');
               ws.send(
@@ -1989,6 +1988,10 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
  */
 async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void> {
   try {
+    if (!project || typeof project.level === 'undefined') {
+      console.warn('checkAndPerformLevelUp: project is undefined or missing level property:', project);
+      return;
+    }
     // Get current level
     const currentLevel = project.level || 1;
     let newLevel = currentLevel;
