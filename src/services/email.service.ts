@@ -16,7 +16,10 @@ const mg = mailgun.client({
 const MAILGUN_DOMAIN =
   process.env.MAILGUN_DOMAIN || 'sandboxaebe4f00726647d187dcb0f5e2dc1c4c.mailgun.org';
 const FROM_EMAIL = process.env.FROM_EMAIL || `BioDAO <postmaster@${MAILGUN_DOMAIN}>`;
-const SANDBOX_NOTIFICATION_EMAIL = process.env.SANDBOX_NOTIFICATION_EMAIL || 'james@bio.xyz';
+const SANDBOX_NOTIFICATION_EMAILS = (process.env.SANDBOX_NOTIFICATION_EMAIL || 'james@bio.xyz')
+  .split(',')
+  .map(email => email.trim())
+  .filter(Boolean);
 
 /**
  * Send an email to the user when they level up
@@ -124,15 +127,19 @@ export async function sendSandboxEmail(project: any): Promise<void> {
       Please reach out to this user to discuss next steps and provide sandbox access.
     `;
 
-    const data = await mg.messages.create(MAILGUN_DOMAIN, {
-      from: FROM_EMAIL,
-      to: SANDBOX_NOTIFICATION_EMAIL,
-      subject: subject,
-      text: message,
-    });
+    const data = await Promise.all(
+      SANDBOX_NOTIFICATION_EMAILS.map(email =>
+        mg.messages.create(MAILGUN_DOMAIN, {
+          from: FROM_EMAIL,
+          to: email,
+          subject: subject,
+          text: message,
+        })
+      )
+    );
 
     console.log(
-      `Sandbox notification email sent to ${SANDBOX_NOTIFICATION_EMAIL}. Response:`,
+      `Sandbox notification email sent to ${SANDBOX_NOTIFICATION_EMAILS.join(', ')}. Response:`,
       data
     );
   } catch (error) {
