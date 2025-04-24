@@ -251,7 +251,7 @@ async function checkForPendingBotNotifications(ws: WebSocket, userId: string): P
         botAdded: true,
         botAddedAt: {
           // Check for bot installations in the last 24 hours
-          gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          gte: new Date(Date.now() -  60 * 1000),
         },
       },
     });
