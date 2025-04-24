@@ -163,11 +163,13 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
           case 'get_nfts': {
             // Fetch NFTs for the user from our database
             await handleGetNFTs(ws, data.userId);
+            await checkAndPerformLevelUp(data.userId, ws);
             break;
           }
           case 'fetch_discord': {
             // This will send Discord info back to the client if available
             await handleCheckDiscordStats(ws, data.userId);
+            await checkAndPerformLevelUp(data.userId, ws);
             break;
           }
           case 'bot_installed': {
@@ -178,6 +180,7 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
                 guildName: data.guildName,
                 memberCount: data.memberCount,
               });
+              await checkAndPerformLevelUp(data.userId, ws);
             } else {
               console.error('Invalid bot_installed message format');
               ws.send(
