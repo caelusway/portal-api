@@ -17,7 +17,12 @@ const app = express();
 const server = http.createServer(app);
 
 // Set up middleware
-app.use(cors());
+app.use(cors({
+  origin: 'https://portal-demo-app.up.railway.app',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.static(config.publicPath));
