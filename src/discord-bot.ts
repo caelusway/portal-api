@@ -19,7 +19,7 @@ import prisma from './services/db.service';
 import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
-
+import { activeConnections } from './websocket/ws.service';
 dotenv.config();
 
 const PORTAL_API_URL = process.env.PORTAL_API_URL || 'http://localhost:3001';
@@ -110,8 +110,7 @@ interface MessageHistoryItem {
 // Map of guild IDs to their message history arrays
 const guildMessageHistory: Map<string, MessageHistoryItem[]> = new Map();
 
-// Map to store active WebSocket connections by user ID
-const activeConnections: Record<string, WS> = {};
+
 
 // Track user message frequency
 interface UserMessageFrequency {
