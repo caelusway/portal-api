@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioDAO WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f8f8f8;
+        }
+
+        .sent {
+            color: blue;
+        }
+
+        .received {
+            color: green;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .action {
+            color: purple;
+            font-weight: bold;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+
+        #botSection {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            display: none;
+        }
+
+        #botInstallUrl {
+            word-break: break-all;
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+
+        .nft-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px;
+            width: 200px;
+            text-align: center;
+        }
+
+        .nft-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .nft-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .nft-date {
+            font-size: 0.8em;
+            color: #666;
+        }
+
+        .server-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px 15px;
+            margin: 10px 0;
+            border: 1px solid #ffeeba;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .markdown-content {
+            line-height: 1.5;
+        }
+
+        .markdown-content ul,
+        .markdown-content ol {
+            padding-left: 20px;
+        }
+
+        .markdown-content a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+
+        .markdown-content p {
+            margin: 8px 0;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+
+        .markdown-content code {
+            background-color: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .markdown-content pre {
+            background-color: #f0f0f0;
+            padding: 8px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #ccc;
+            margin-left: 0;
+            padding-left: 16px;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <h1>BioDAO WebSocket Test Client</h1>
+
+        <div id="serverWarning" class="server-warning">
+            <strong>Warning:</strong> CoreAgent is not responding to messages. The server may not have the message
+            handler configured properly.
+            <div class="mt-2">
+                <button id="showDebugInfo" class="btn btn-sm btn-outline-warning">Show Debug Info</button>
+            </div>
+            <div id="debugInfo" style="display: none; margin-top: 10px; font-family: monospace; font-size: 0.8em;">
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        Connection
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="wsUrl" value="ws://localhost:3001"
+                                placeholder="WebSocket URL">
+                            <div class="input-group-append">
+                                <button class="btn btn-primary" type="button" id="connectBtn">Connect</button>
+                                <button class="btn btn-danger" type="button" id="disconnectBtn"
+                                    disabled>Disconnect</button>
+                            </div>
+                        </div>
+                        <div id="connectionStatus" class="alert alert-secondary">Not connected</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        Authentication
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="wallet">Wallet Address</label>
+                            <input type="text" class="form-control" id="wallet" placeholder="0x1234...">
+                        </div>
+                        <div class="form-group">
+                            <label for="privyId">Privy ID</label>
+                            <input type="text" class="form-control" id="privyId" placeholder="privy:123...">
+                        </div>
+                        <button class="btn btn-success" id="authBtn" disabled>Authenticate</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        User Info
+                    </div>
+                    <div class="card-body">
+                        <p><strong>User ID:</strong> <span id="userId">Not authenticated</span></p>
+                        <p><strong>Level:</strong> <span id="userLevel">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        Message
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="messageInput">Message to CoreAgent</label>
+                            <textarea class="form-control" id="messageInput" rows="3"
+                                placeholder="Type your message here..."></textarea>
+                        </div>
+                        <button class="btn btn-primary" id="sendMessageBtn" disabled>Send Message</button>
+
+                        <div class="mt-3">
+                            <h5>Quick Actions</h5>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="mint_idea">Mint Idea NFT</button>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="mint_hypothesis">Mint Hypothesis NFT</button>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="check_progress">Check Progress</button>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="discord_link">Setup Discord</button>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="discord_bot_callback">Bot Installation Callback</button>
+                            <button class="btn btn-sm btn-outline-primary action-btn" disabled
+                                data-action="get_nfts">Get My NFTs</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        Conversation
+                    </div>
+                    <div class="card-body">
+                        <div id="messages" class="conversation-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        My NFTs
+                    </div>
+                    <div class="card-body">
+                        <div id="nfts-container" class="row">
+                            <p id="no-nfts">No NFTs to display</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        Debug Log
+                    </div>
+                    <div class="card-body">
+                        <div id="logger" class="debug-log"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New section for API testing -->
+        <div class="row mt-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        API Testing
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <h5>Projects API</h5>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="projectId" placeholder="Project ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-info" id="getProjectBtn">Get Project</button>
+                                    <button class="btn btn-warning" id="updateProjectBtn">Update Project</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="projectUpdateData">Update Data (JSON)</label>
+                                <textarea class="form-control" id="projectUpdateData" rows="2"
+                                    placeholder='{"projectName": "Updated Project"}'></textarea>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5>Chat API</h5>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="chatUserId" placeholder="User ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-info" id="getSessionsBtn">Get Sessions</button>
+                                </div>
+                            </div>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="sessionId" placeholder="Session ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-info" id="getMessagesBtn">Get Messages</button>
+                                    <button class="btn btn-primary" id="sendChatMessageBtn">Send Message</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="chatMessageText">Message Content</label>
+                                <textarea class="form-control" id="chatMessageText" rows="2"
+                                    placeholder="Message content..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5>Discord API</h5>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="discordProjectId" placeholder="Project ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-info" id="getDiscordStatsBtn">Get Discord Stats</button>
+                                </div>
+                            </div>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="guildId" placeholder="Guild ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-warning" id="updateDiscordStatsBtn">Update Stats</button>
+                                    <button class="btn btn-primary" id="botInstalledBtn">Bot Installed</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="discordUpdateData">Stats Data (JSON)</label>
+                                <textarea class="form-control" id="discordUpdateData" rows="2"
+                                    placeholder='{"memberCount": 10, "messagesCount": 50, "papersShared": 5}'></textarea>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <h5>NFT API</h5>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="nftProjectId" placeholder="Project ID">
+                                <div class="input-group-append">
+                                    <button class="btn btn-info" id="getNFTsBtn">Get NFTs</button>
+                                </div>
+                            </div>
+                            <div class="input-group mb-2">
+                                <input type="text" class="form-control" id="nftWalletAddress"
+                                    placeholder="Wallet Address">
+                                <select class="form-control" id="nftType">
+                                    <option value="idea">Idea</option>
+                                    <option value="vision">Vision</option>
+                                </select>
+                                <div class="input-group-append">
+                                    <button class="btn btn-success" id="mintNFTBtn">Mint NFT</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h5>API Response</h5>
+                            <pre id="apiResponse" class="p-3 bg-light border rounded"
+                                style="max-height: 300px; overflow: auto;">No response yet</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let userId = null;
+        let botUrl = null;
+        let messagesSent = 0;
+        let responsesReceived = 0;
+        let lastMessageTime = null;
+        let checkCoreAgentTimer = null;
+
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const wsUrl = document.getElementById('wsUrl');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const authBtn = document.getElementById('authBtn');
+        const wallet = document.getElementById('wallet');
+        const privyId = document.getElementById('privyId');
+        const userIdElement = document.getElementById('userId');
+        const userLevelElement = document.getElementById('userLevel');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageBtn = document.getElementById('sendMessageBtn');
+        const messages = document.getElementById('messages');
+        const logger = document.getElementById('logger');
+        const actionButtons = document.querySelectorAll('.action-btn');
+        const nftsContainer = document.getElementById('nfts-container');
+        const serverWarning = document.getElementById('serverWarning');
+        const showDebugInfo = document.getElementById('showDebugInfo');
+        const debugInfo = document.getElementById('debugInfo');
+
+        wallet.value = '0x1234567890abcdef1234567890abcdef12345678';
+        privyId.value = 'privy_' + Math.random().toString(36).substring(2, 15);
+
+        connectBtn.addEventListener('click', () => {
+            connect();
+        });
+
+        disconnectBtn.addEventListener('click', () => {
+            disconnect();
+        });
+
+        showDebugInfo.addEventListener('click', () => {
+            if (debugInfo.style.display === 'none') {
+                debugInfo.style.display = 'block';
+                showDebugInfo.textContent = 'Hide Debug Info';
+
+                // Show debug information
+                debugInfo.innerHTML = `
+                    <p>Messages sent: ${messagesSent}</p>
+                    <p>Responses received: ${responsesReceived}</p>
+                    <p>Last message time: ${lastMessageTime ? new Date(lastMessageTime).toLocaleTimeString() : 'None'}</p>
+                    <p>Connection status: ${ws ? (ws.readyState === WebSocket.OPEN ? 'Open' : 'Closed/Connecting') : 'None'}</p>
+                    <p>User authenticated: ${userId ? 'Yes' : 'No'}</p>
+                    <p>WebSocket URL: ${wsUrl.value}</p>
+                    <h4>Server Issue Checklist:</h4>
+                    <ul>
+                        <li>Check if server has 'message' case in switch statement</li>
+                        <li>Check if handleAIInteraction function is called</li>
+                        <li>Check OpenAI API keys in server .env file</li>
+                        <li>Look for errors in server console logs</li>
+                    </ul>
+                `;
+            } else {
+                debugInfo.style.display = 'none';
+                showDebugInfo.textContent = 'Show Debug Info';
+            }
+        });
+
+        authBtn.addEventListener('click', () => {
+            if (!ws) return;
+
+            // Disable the button during auth
+            authBtn.disabled = true;
+
+            // Show authentication progress
+            userIdElement.textContent = "Authenticating...";
+
+            // Create auth payload
+            const authPayload = {
+                type: 'auth',
+                wallet: wallet.value,
+                privyId: privyId.value
+            };
+
+            // Log the attempt
+            log('Authenticating via WebSocket', authPayload);
+
+            // Send auth message through WebSocket
+            ws.send(JSON.stringify(authPayload));
+        });
+
+        sendMessageBtn.addEventListener('click', () => {
+            if (!ws || !userId) return;
+
+            const message = {
+                type: 'message',
+                content: messageInput.value
+            };
+
+            ws.send(JSON.stringify(message));
+            addMessage('User', messageInput.value);
+            log('Sent', message);
+            messageInput.value = '';
+
+            // Track message statistics for CoreAgent health check
+            messagesSent++;
+            lastMessageTime = Date.now();
+            checkCoreAgentHealth();
+        });
+
+        actionButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!ws || !userId) return;
+
+                const action = btn.dataset.action;
+                let message;
+
+                switch (action) {
+                    case 'mint_idea':
+                        message = {
+                            type: 'message',
+                            content: 'I would like to mint an Idea NFT'
+                        };
+                        break;
+                    case 'mint_hypothesis':
+                        message = {
+                            type: 'message',
+                            content: 'I would like to mint a Hypothesis NFT'
+                        };
+                        break;
+                    case 'check_progress':
+                        message = {
+                            type: 'message',
+                            content: 'What is my current progress?'
+                        };
+                        break;
+                    case 'discord_link':
+                        message = {
+                            type: 'message',
+                            content: 'Here is my Discord server: discord.gg/testserver'
+                        };
+                        break;
+                    case 'discord_bot_callback':
+                        message = {
+                            type: 'handle_discord_bot_callback',
+                            serverId: 'server_12345',
+                            token: 'verification_token_123'
+                        };
+                        break;
+                    case 'get_nfts':
+                        message = {
+                            type: 'get_nfts'
+                        };
+                        break;
+                    default:
+                        return;
+                }
+
+                ws.send(JSON.stringify(message));
+
+                if (message.type === 'message') {
+                    addMessage('User', message.content);
+                } else {
+                    log('Sent special action', message);
+                }
+            });
+        });
+
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+
+            try {
+                ws = new WebSocket(wsUrl.value);
+
+                ws.onopen = () => {
+                    connectionStatus.className = 'alert alert-success';
+                    connectionStatus.textContent = 'Connected';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    authBtn.disabled = false;
+                    log('Connected to WebSocket server');
+
+                    // Reset health check metrics
+                    messagesSent = 0;
+                    responsesReceived = 0;
+                    lastMessageTime = null;
+                    serverWarning.style.display = 'none';
+                };
+
+                ws.onclose = () => {
+                    connectionStatus.className = 'alert alert-secondary';
+                    connectionStatus.textContent = 'Disconnected';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    authBtn.disabled = true;
+                    sendMessageBtn.disabled = true;
+                    actionButtons.forEach(btn => btn.disabled = true);
+                    userId = null;
+                    userIdElement.textContent = 'Not authenticated';
+                    userLevelElement.textContent = '-';
+                    log('Disconnected from WebSocket server');
+                    ws = null;
+
+                    // Clear health check
+                    stopCoreAgentHealthCheck();
+                };
+
+                ws.onerror = (error) => {
+                    connectionStatus.className = 'alert alert-danger';
+                    connectionStatus.textContent = 'Error connecting';
+                    log('WebSocket error', error);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log('Received', data);
+
+                        handleMessage(data);
+                    } catch (error) {
+                        log('Error parsing message', error);
+                    }
+                };
+            } catch (error) {
+                log('Connection error', error);
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+            stopCoreAgentHealthCheck();
+        }
+
+        function handleMessage(data) {
+            if (data.type === 'auth_success') {
+                userId = data.userId;
+                userIdElement.textContent = userId;
+                userLevelElement.textContent = data.level;
+                sendMessageBtn.disabled = false;
+                actionButtons.forEach(btn => btn.disabled = false);
+                log('Authentication successful', data);
+
+                // Get NFTs automatically upon successful auth
+                getNFTs();
+
+                // If user is at level 2 or above, automatically fetch Discord info
+                if (data.level >= 2) {
+                    const discordRequest = {
+                        type: 'fetch_discord',
+                        userId: userId
+                    };
+                    ws.send(JSON.stringify(discordRequest));
+                    log('Automatically requesting Discord info for level 2+ user');
+                }
+
+                // Start checking CoreAgent health
+                startCoreAgentHealthCheck();
+            }
+            else if (data.type === 'message') {
+                addMessage('CoreAgent', data.content);
+                responsesReceived++;
+                serverWarning.style.display = 'none'; // Hide warning if we get a response
+            }
+            else if (data.type === 'error') {
+                addSystemMessage(`Error: ${data.message || data.content}`, 'error');
+            }
+            else if (data.type === 'discord_info') {
+                log('Received Discord info', data);
+
+                // If this includes a bot installation link, store it
+                if (data.discord && data.discord.botInstallationUrl) {
+                    botUrl = data.discord.botInstallationUrl;
+                    log('Stored bot installation URL', botUrl);
+                }
+
+                // If we have a message about discord updates, show it
+                if (data.message) {
+                    addSystemMessage(data.message, 'info');
+                }
+            }
+            else if (data.type === 'nfts') {
+                log('Received NFTs', data);
+                displayNFTs(data.nfts);
+            }
+        }
+
+        function getNFTs() {
+            if (!ws || !userId) return;
+
+            const message = {
+                type: 'get_nfts'
+            };
+
+            ws.send(JSON.stringify(message));
+            log('Requested NFTs');
+        }
+
+        function displayNFTs(nfts) {
+            // Clear existing NFTs
+            nftsContainer.innerHTML = '';
+
+            if (!nfts || nfts.length === 0) {
+                nftsContainer.innerHTML = '<p id="no-nfts">No NFTs to display</p>';
+                return;
+            }
+
+            // Display each NFT
+            nfts.forEach(nft => {
+                const nftCard = document.createElement('div');
+                nftCard.className = 'nft-card';
+
+                const formattedDate = new Date(nft.mintedAt).toLocaleDateString();
+
+                let imageHtml = '';
+                if (nft.imageUrl) {
+                    imageHtml = `<img src="${nft.imageUrl}" class="nft-image" alt="${nft.type} NFT">`;
+                } else {
+                    imageHtml = `<div class="nft-image" style="background-color: #eee; display: flex; align-items: center; justify-content: center;">No Image</div>`;
+                }
+
+                nftCard.innerHTML = `
+                    ${imageHtml}
+                    <div class="nft-title">${nft.type.charAt(0).toUpperCase() + nft.type.slice(1)} NFT</div>
+                    <div class="nft-date">Minted on ${formattedDate}</div>
+                    ${nft.transactionHash ? `<div class="nft-hash" style="font-size: 0.7em; word-break: break-all; margin-top: 5px;">TX: ${nft.transactionHash.substring(0, 10)}...</div>` : ''}
+                `;
+
+                nftsContainer.appendChild(nftCard);
+            });
+        }
+
+        function addMessage(sender, content) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message';
+
+            const headerElement = document.createElement('div');
+            headerElement.className = `message-header ${sender.toLowerCase()}`;
+            headerElement.textContent = sender;
+
+            const contentElement = document.createElement('div');
+
+            if (sender === 'CoreAgent') {
+                contentElement.className = 'message-content markdown-content';
+
+                if (content.includes('[BOT_INSTALLATION_LINK]') && botUrl) {
+                    content = content.replace('[BOT_INSTALLATION_LINK]', botUrl);
+                }
+
+                contentElement.innerHTML = marked.parse(content);
+            } else {
+                contentElement.className = 'message-content';
+                contentElement.textContent = content;
+            }
+
+            messageElement.appendChild(headerElement);
+            messageElement.appendChild(contentElement);
+
+            messages.appendChild(messageElement);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function addSystemMessage(content, type = 'info') {
+            const messageElement = document.createElement('div');
+            messageElement.className = `system-message ${type}`;
+            messageElement.innerHTML = content;
+
+            messages.appendChild(messageElement);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function log(title, data) {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+
+            const timestamp = new Date().toLocaleTimeString();
+            const titleElement = document.createElement('div');
+            titleElement.className = 'log-title';
+            titleElement.textContent = `[${timestamp}] ${title}`;
+
+            logEntry.appendChild(titleElement);
+
+            if (data) {
+                const dataElement = document.createElement('pre');
+                dataElement.className = 'log-data';
+                dataElement.textContent = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+                logEntry.appendChild(dataElement);
+            }
+
+            logger.appendChild(logEntry);
+            logger.scrollTop = logger.scrollHeight;
+        }
+
+        // CoreAgent Health Check functions
+        function startCoreAgentHealthCheck() {
+            stopCoreAgentHealthCheck(); // Clear any existing timer
+            checkCoreAgentTimer = setInterval(checkCoreAgentHealth, 5000); // Check every 5 seconds
+        }
+
+        function stopCoreAgentHealthCheck() {
+            if (checkCoreAgentTimer) {
+                clearInterval(checkCoreAgentTimer);
+                checkCoreAgentTimer = null;
+            }
+        }
+
+        function checkCoreAgentHealth() {
+            // Only check if authenticated
+            if (!userId) return;
+
+            // If we've sent messages but received no responses, show warning
+            if (messagesSent > 0 && responsesReceived === 0) {
+                // Check if it's been more than 10 seconds since last message
+                const timeSinceLastMessage = lastMessageTime ? (Date.now() - lastMessageTime) : 0;
+
+                if (timeSinceLastMessage > 10000) { // 10 seconds
+                    serverWarning.style.display = 'block';
+                    debugInfo.innerHTML = `
+                        <p>Messages sent: ${messagesSent}</p>
+                        <p>Responses received: ${responsesReceived}</p>
+                        <p>Last message time: ${lastMessageTime ? new Date(lastMessageTime).toLocaleTimeString() : 'None'}</p>
+                        <p>Time since last message: ${Math.round(timeSinceLastMessage / 1000)} seconds</p>
+                        <p>Connection status: ${ws ? (ws.readyState === WebSocket.OPEN ? 'Open' : 'Closed/Connecting') : 'None'}</p>
+                        <p>User authenticated: ${userId ? 'Yes' : 'No'}</p>
+                        <h4>Server Issue Checklist:</h4>
+                        <ul>
+                            <li>Check if server has 'message' case in switch statement</li>
+                            <li>Check if handleAIInteraction function is called</li>
+                            <li>Check OpenAI API keys in server .env file</li>
+                            <li>Look for errors in server console logs</li>
+                        </ul>
+                    `;
+                }
+            } else if (responsesReceived > 0) {
+                // Hide warning if we've received responses
+                serverWarning.style.display = 'none';
+            }
+        }
+
+        window.addEventListener('load', () => {
+            connect();
+        });
+
+        // API Testing Functions
+        document.getElementById('getProjectBtn').addEventListener('click', async () => {
+            const projectId = document.getElementById('projectId').value;
+            if (!projectId) {
+                showApiResponse({ error: 'Project ID is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/projects/${projectId}`);
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('updateProjectBtn').addEventListener('click', async () => {
+            const projectId = document.getElementById('projectId').value;
+            const updateDataStr = document.getElementById('projectUpdateData').value;
+
+            if (!projectId) {
+                showApiResponse({ error: 'Project ID is required' });
+                return;
+            }
+
+            try {
+                const updateData = JSON.parse(updateDataStr || '{}');
+                const response = await fetch(`${getApiBaseUrl()}/api/projects/${projectId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('getSessionsBtn').addEventListener('click', async () => {
+            const userId = document.getElementById('chatUserId').value;
+            if (!userId) {
+                showApiResponse({ error: 'User ID is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/chat/sessions/${userId}`);
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('getMessagesBtn').addEventListener('click', async () => {
+            const sessionId = document.getElementById('sessionId').value;
+            if (!sessionId) {
+                showApiResponse({ error: 'Session ID is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/chat/messages/${sessionId}`);
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('sendChatMessageBtn').addEventListener('click', async () => {
+            const sessionId = document.getElementById('sessionId').value;
+            const content = document.getElementById('chatMessageText').value;
+
+            if (!sessionId) {
+                showApiResponse({ error: 'Session ID is required' });
+                return;
+            }
+
+            if (!content) {
+                showApiResponse({ error: 'Message content is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/chat/messages/${sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, isFromAgent: false })
+                });
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('getDiscordStatsBtn').addEventListener('click', async () => {
+            const projectId = document.getElementById('discordProjectId').value;
+            if (!projectId) {
+                showApiResponse({ error: 'Project ID is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/discord/${projectId}`);
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('updateDiscordStatsBtn').addEventListener('click', async () => {
+            const guildId = document.getElementById('guildId').value;
+            const updateDataStr = document.getElementById('discordUpdateData').value;
+
+            if (!guildId) {
+                showApiResponse({ error: 'Guild ID is required' });
+                return;
+            }
+
+            try {
+                const updateData = JSON.parse(updateDataStr || '{}');
+                updateData.guildId = guildId;
+
+                // Add API key to request
+                updateData.apiKey = prompt('Enter API Key for Discord updates:');
+
+                const response = await fetch(`${getApiBaseUrl()}/api/discord/stats-update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('botInstalledBtn').addEventListener('click', async () => {
+            const guildId = document.getElementById('guildId').value;
+
+            if (!guildId) {
+                showApiResponse({ error: 'Guild ID is required' });
+                return;
+            }
+
+            try {
+                const payload = {
+                    guildId,
+                    guildName: prompt('Enter Guild Name:') || 'Test Server',
+                    memberCount: parseInt(prompt('Enter Member Count:') || '1')
+                };
+
+                // Add API key to request
+                payload.apiKey = prompt('Enter API Key for Discord updates:');
+
+                const response = await fetch(`${getApiBaseUrl()}/api/discord/bot-installed`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('getNFTsBtn').addEventListener('click', async () => {
+            const projectId = document.getElementById('nftProjectId').value;
+            if (!projectId) {
+                showApiResponse({ error: 'Project ID is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/nfts/${projectId}`);
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        document.getElementById('mintNFTBtn').addEventListener('click', async () => {
+            const projectId = document.getElementById('nftProjectId').value;
+            const walletAddress = document.getElementById('nftWalletAddress').value;
+            const nftType = document.getElementById('nftType').value;
+
+            if (!projectId) {
+                showApiResponse({ error: 'Project ID is required' });
+                return;
+            }
+
+            if (!walletAddress) {
+                showApiResponse({ error: 'Wallet Address is required' });
+                return;
+            }
+
+            try {
+                const response = await fetch(`${getApiBaseUrl()}/api/nfts/mint`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectId,
+                        walletAddress,
+                        nftType
+                    })
+                });
+                const data = await response.json();
+                showApiResponse(data);
+            } catch (error) {
+                showApiResponse({ error: error.message });
+            }
+        });
+
+        function getApiBaseUrl() {
+            // Extract the base URL from the WebSocket URL
+            const wsUrl = document.getElementById('wsUrl').value;
+            return wsUrl.replace('ws://', 'http://');
+        }
+
+        function showApiResponse(data) {
+            const responseElement = document.getElementById('apiResponse');
+            responseElement.textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+
+</html>

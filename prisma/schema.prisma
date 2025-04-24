@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id                  String        @id @default(uuid())
+  wallet              String        @unique
+  privyId             String?       @unique
+  level               Int           @default(1)
+  // Additional fields from profiles table
+  fullName            String?
+  email               String?
+  projectName         String?
+  projectDescription  String?
+  projectVision       String?
+  scientificReferences String?
+  credentialLinks     String?
+  teamMembers         String?
+  motivation          String?
+  progress            String?
+  // Timestamps
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  // Relations
+  ChatSessions        ChatSession[]
+  Discord             Discord?
+  NFTs                NFT[]
+}
+
+model NFT {
+  id             String   @id @default(uuid())
+  type           String
+  mintedAt       DateTime @default(now())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  transactionHash String?
+  imageUrl       String?
+}
+
+model Discord {
+  id                String    @id @default(uuid())
+  serverId          String
+  memberCount       Int       @default(0)
+  papersShared      Int       @default(0)
+  messagesCount     Int       @default(0)
+  qualityScore      Int       @default(0)
+  projectId         String    @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  inviteLink        String
+  botAdded          Boolean   @default(false)
+  botAddedAt        DateTime?
+  verificationToken String?
+  verified          Boolean   @default(false)
+  serverIcon        String?
+  serverName        String?
+  project           Project   @relation(fields: [projectId], references: [id])
+}
+
+model ChatSession {
+  id        String        @id @default(uuid())
+  projectId String
+  startedAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+  project   Project       @relation(fields: [projectId], references: [id])
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  content       String
+  isFromAgent   Boolean     @default(false)
+  timestamp     DateTime    @default(now())
+  sessionId     String
+  actionTaken   String?
+  actionSuccess Boolean?
+  session       ChatSession @relation(fields: [sessionId], references: [id])
+}
