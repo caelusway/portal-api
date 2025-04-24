@@ -494,10 +494,11 @@ client.on(Events.MessageCreate, async (message) => {
                   data: { level: 4 },
                 });
 
-                if (project.email) {
-                  await sendLevelUpEmail(project.email, 4);
-                  await sendSandboxEmail(project);
-                }
+               
+              }
+              if (project.email) {
+                await sendLevelUpEmail(project.email, 4);
+                await sendSandboxEmail(project);
               }
             }
           }
