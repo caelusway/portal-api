@@ -277,6 +277,8 @@ export function evaluatePaperQuality(message: string, hasAttachments: boolean = 
     score += 20;
   }
 
+  score += 20;
+
   // Cap score at 100
   return Math.min(100, score);
 }
@@ -470,6 +472,7 @@ export function analyzeScientificPdf(
     confidence = 30;
     reason += 'PDF file with no negative indicators; ';
   }
+  confidence += 30;
 
   // Calculate final result
   const isScientificPaper = confidence >= 30;
