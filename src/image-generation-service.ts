@@ -46,13 +46,25 @@ export async function generateIdeaNFTImage(
     const prompt = `Create a unique, abstract visualization of a scientific idea or hypothesis based on this description: "${description}". 
     The image should look like a modern, minimalist science concept art with light blue and white colors. It should convey innovation and scientific discovery.`;
 
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'standard',
-    });
+    let response;
+    try {
+      response = await openai.images.generate({
+        model: 'gpt-image-1',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+      });
+    } catch (primaryError) {
+      console.warn('gpt-image-1 failed, falling back to dall-e-3:', primaryError);
+      response = await openai.images.generate({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+      });
+    }
 
     // Get image URL from response
     const imageUrl = response.data[0].url;
@@ -98,13 +110,25 @@ export async function generateVisionNFTImage(projectId: string, vision: string):
     const prompt = `Create a vibrant, futuristic visualization representing this vision: "${vision}". 
     The image should look like a forward-looking concept art with purple and gold accents. It should convey the future potential and impact of this scientific vision.`;
 
-    const response = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: prompt,
-      n: 1,
-      size: '1024x1024',
-      quality: 'standard',
-    });
+    let response;
+    try {
+      response = await openai.images.generate({
+        model: 'gpt-image-1',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+      });
+    } catch (primaryError) {
+      console.warn('gpt-image-1 failed, falling back to dall-e-3:', primaryError);
+      response = await openai.images.generate({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+      });
+    }
 
     // Get image URL from response
     const imageUrl = response.data[0].url;
