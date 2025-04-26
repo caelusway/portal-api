@@ -44,13 +44,13 @@ export async function checkDiscordLevelProgress(project: any): Promise<boolean> 
     // Level 3 to 4: Check Discord metrics (members, messages, papers)
     else if (
       currentLevel === 3 &&
-      discord.memberCount >= 10 &&
-      discord.papersShared >= 25 &&
-      discord.messagesCount >= 100
+      discord.memberCount >= 5 &&
+      discord.papersShared >= 5 &&
+      discord.messagesCount >= 50
     ) {
       console.log(
         `[Level Check] Project ${project.id} meets level 4 requirements: ` +
-          `${discord.memberCount}/10 members, ${discord.papersShared}/25 papers, ${discord.messagesCount}/100 messages`
+          `${discord.memberCount}/5 members, ${discord.papersShared}/5 papers, ${discord.messagesCount}/50 messages`
       );
       leveledUp = true;
       newLevel = 4;
@@ -193,7 +193,7 @@ export function getNextLevelRequirements(currentLevel: number): string[] {
     case 2:
       return ['Create Discord Server', 'Reach 4+ Members'];
     case 3:
-      return ['Reach 10+ Members', 'Share 25+ Scientific Papers', 'Send 100+ Messages'];
+      return ['Reach 5+ Members', 'Share 5+ Scientific Papers', 'Send 50+ Messages'];
     case 4:
       return ['All requirements met - Bio team will contact you'];
     default:

@@ -322,6 +322,11 @@ client.on(Events.MessageCreate, async (message) => {
   // Check if this is a low-value message that shouldn't count toward stats
   const isSpam = isLowValueMessage(message.content);
 
+  // --- PDF LINK DETECTION ---
+  // Detect if the message contains a direct link to a PDF (e.g., https://.../paper.pdf)
+  const pdfUrlRegex = /https?:\/\/[^\s]+\.pdf(\?[^\s]*)?/i;
+  const hasPdfLink = pdfUrlRegex.test(message.content);
+
   // Use the stricter paper detection logic from paper-detection.ts
   const hasAttachment = message.attachments.size > 0;
   let isPaper = false;
@@ -343,7 +348,15 @@ client.on(Events.MessageCreate, async (message) => {
   }
   // Only run text-based detection if no PDF-based paper was found
   if (!isPaper) {
-    isPaper = detectPaper(message.content, hasAttachment);
+    // If there's a PDF link, count as paper
+    if (hasPdfLink) {
+      isPaper = true;
+      try {
+        await message.react('📚');
+      } catch (error) {}
+    } else {
+      isPaper = detectPaper(message.content, hasAttachment);
+    }
   }
 
   // --- Paper counting block ---
@@ -386,9 +399,9 @@ client.on(Events.MessageCreate, async (message) => {
           );
           if (
             project.level === 3 &&
-            updatedRecord.memberCount >= 10 &&
-            updatedRecord.papersShared >= 25 &&
-            updatedRecord.messagesCount >= 100
+            updatedRecord.memberCount >= 5 &&
+            updatedRecord.papersShared >= 5 &&
+            updatedRecord.messagesCount >= 50
           ) {
             console.log(
               `[Paper Detection] Project ${project.id} meets level 4 requirements after paper detection!`
@@ -403,8 +416,6 @@ client.on(Events.MessageCreate, async (message) => {
                 where: { id: project.id },
                 data: { level: 4 },
               });
-
-     
             }
             if (project.email) {
               await sendLevelUpEmail(project.email, 4);
@@ -462,12 +473,12 @@ client.on(Events.MessageCreate, async (message) => {
         if (project) {
           // Check for level-up if we've reached important message count thresholds
           if (
+            updatedRecord.messagesCount === 10 ||
+            updatedRecord.messagesCount === 20 ||
+            updatedRecord.messagesCount === 30 ||
+            updatedRecord.messagesCount === 40 ||
             updatedRecord.messagesCount === 50 ||
-            updatedRecord.messagesCount === 75 ||
-            updatedRecord.messagesCount === 100 ||
-            updatedRecord.messagesCount === 125 ||
-            updatedRecord.messagesCount === 150 ||
-            (updatedRecord.messagesCount >= 100 && updatedRecord.messagesCount % 25 === 0)
+            (updatedRecord.messagesCount >= 50 && updatedRecord.messagesCount % 25 === 0)
           ) {
             console.log(
               `[Discord] Message count milestone reached: ${updatedRecord.messagesCount} - checking for level-up`
@@ -476,9 +487,9 @@ client.on(Events.MessageCreate, async (message) => {
             // Level 3 to 4 transition depends heavily on message count
             if (
               project.level === 3 &&
-              updatedRecord.memberCount >= 10 &&
-              updatedRecord.papersShared >= 25 &&
-              updatedRecord.messagesCount >= 100
+              updatedRecord.memberCount >= 5 &&
+              updatedRecord.papersShared >= 5 &&
+              updatedRecord.messagesCount >= 50
             ) {
               console.log(
                 `[Discord] Project ${project.id} meets level 4 requirements after message milestone!`
@@ -493,12 +504,6 @@ client.on(Events.MessageCreate, async (message) => {
                   where: { id: project.id },
                   data: { level: 4 },
                 });
-
-               
-              }
-              if (project.email) {
-                await sendLevelUpEmail(project.email, 4);
-                await sendSandboxEmail(project);
               }
             }
           }

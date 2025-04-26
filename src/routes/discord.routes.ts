@@ -86,18 +86,18 @@ router.get('/:projectId', async (req: any, res: any) => {
       progress = {
         members: {
           current: discordStats.memberCount,
-          required: 10,
-          percent: Math.min(100, Math.round((discordStats.memberCount / 10) * 100)),
+          required: 5,
+          percent: Math.min(100, Math.round((discordStats.memberCount / 5) * 100)),
         },
         messages: {
           current: discordStats.messagesCount,
-          required: 100,
-          percent: Math.min(100, Math.round((discordStats.messagesCount / 100) * 100)),
+          required: 50,
+          percent: Math.min(100, Math.round((discordStats.messagesCount / 50) * 100)),
         },
         papers: {
           current: discordStats.papersShared,
-          required: 25,
-          percent: Math.min(100, Math.round((discordStats.papersShared / 25) * 100)),
+          required: 5,
+          percent: Math.min(100, Math.round((discordStats.papersShared / 5) * 100)),
         },
       };
     }
@@ -579,9 +579,9 @@ router.post('/check-level-requirements', async (req: any, res: any) => {
     // Level 3 to 4: Check Discord metrics
     else if (
       previousLevel === 3 &&
-      discord.memberCount >= 10 &&
-      discord.papersShared >= 25 &&
-      discord.messagesCount >= 100
+      discord.memberCount >= 5 &&
+      discord.papersShared >= 5 &&
+      discord.messagesCount >= 50
     ) {
       levelUp = true;
       newLevel = 4;
