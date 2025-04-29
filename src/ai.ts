@@ -143,9 +143,9 @@ const LEVEL_PROMPTS = {
     - LEVEL 4: Scientific Proof (Next Level)
     
     REQUIRED ACTIONS FOR LEVEL COMPLETION:
-    - ✅ Reach 10+ members (current: {memberCount})
-    - ✅ Share 25+ scientific papers (current: {papersShared})
-    - ✅ Send 100+ messages (current: {messagesCount})
+    - ✅ Reach 5+ members (current: {memberCount})
+    - ✅ Share 5+ scientific papers (current: {papersShared})
+    - ✅ Send 50+ messages (current: {messagesCount})
     
     RESPONSE STYLE:
     - Give specific actionable strategies, not general advice.
@@ -259,9 +259,9 @@ function getSystemPrompt(level: number, discordStats?: any, botInstallationUrl?:
 - Verification: ${discordStats.verified ? 'Complete' : 'Pending'} (Required)`;
     } else if (level === 3) {
       prompt += `\n\nCURRENT PROGRESS TOWARDS LEVEL 4:
-- Members: ${discordStats.memberCount}/10 required (${Math.min(100, Math.round((discordStats.memberCount / 10) * 100))}%)
-- Papers Shared: ${discordStats.papersShared}/25 required (${Math.min(100, Math.round((discordStats.papersShared / 25) * 100))}%)
-- Messages Sent: ${discordStats.messagesCount}/100 required (${Math.min(100, Math.round((discordStats.messagesCount / 100) * 100))}%)`;
+- Members: ${discordStats.memberCount}/10 required (${Math.min(100, Math.round((discordStats.memberCount / 5) * 100))}%)
+- Papers Shared: ${discordStats.papersShared}/25 required (${Math.min(100, Math.round((discordStats.papersShared / 5) * 100))}%)
+- Messages Sent: ${discordStats.messagesCount}/100 required (${Math.min(100, Math.round((discordStats.messagesCount / 50) * 100))}%)`;
     }
   } else if (level === 2) {
     // If level 2 but no Discord stats, replace with zeros and add note about setup

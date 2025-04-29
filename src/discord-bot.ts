@@ -399,9 +399,9 @@ client.on(Events.MessageCreate, async (message) => {
           );
           if (
             project.level === 3 &&
-            updatedRecord.memberCount >= 10 &&
-            updatedRecord.papersShared >= 25 &&
-            updatedRecord.messagesCount >= 100
+            updatedRecord.memberCount >= 5 &&
+            updatedRecord.papersShared >= 5 &&
+            updatedRecord.messagesCount >= 50
           ) {
             console.log(
               `[Paper Detection] Project ${project.id} meets level 4 requirements after paper detection!`
@@ -473,12 +473,12 @@ client.on(Events.MessageCreate, async (message) => {
         if (project) {
           // Check for level-up if we've reached important message count thresholds
           if (
+            updatedRecord.messagesCount === 10 ||
+            updatedRecord.messagesCount === 20 ||
+            updatedRecord.messagesCount === 30 ||
+            updatedRecord.messagesCount === 40 ||
             updatedRecord.messagesCount === 50 ||
-            updatedRecord.messagesCount === 75 ||
-            updatedRecord.messagesCount === 100 ||
-            updatedRecord.messagesCount === 125 ||
-            updatedRecord.messagesCount === 150 ||
-            (updatedRecord.messagesCount >= 100 && updatedRecord.messagesCount % 25 === 0)
+            (updatedRecord.messagesCount >= 50 && updatedRecord.messagesCount % 25 === 0)
           ) {
             console.log(
               `[Discord] Message count milestone reached: ${updatedRecord.messagesCount} - checking for level-up`
@@ -487,9 +487,9 @@ client.on(Events.MessageCreate, async (message) => {
             // Level 3 to 4 transition depends heavily on message count
             if (
               project.level === 3 &&
-              updatedRecord.memberCount >= 10 &&
-              updatedRecord.papersShared >= 25 &&
-              updatedRecord.messagesCount >= 100
+              updatedRecord.memberCount >= 5 &&
+              updatedRecord.papersShared >= 5 &&
+              updatedRecord.messagesCount >= 50
             ) {
               console.log(
                 `[Discord] Project ${project.id} meets level 4 requirements after message milestone!`

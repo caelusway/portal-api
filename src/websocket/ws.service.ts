@@ -1017,14 +1017,14 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
       const messages = project.Discord?.messagesCount || 0;
       return [
         `**You're doing great! Let's get you to Level 4:**\n`,
-        `**1. Grow to 10+ Members** *(you need ${Math.max(0, 10 - members)} more)*:\n`,
+        `**1. Grow to 5+ Members** *(you need ${Math.max(0, 5 - members)} more)*:\n`,
         `- Share your invite with researchers`,
         `- Host community events`,
         `- Invite participants from aligned communities\n`,
-        `**2. Share 25+ Scientific Papers** *(you need ${Math.max(0, 25 - papers)} more)*:\n`,
+        `**2. Share 5+ Scientific Papers** *(you need ${Math.max(0, 5 - papers)} more)*:\n`,
         `- Share PDFs or links from PubMed, bioRxiv, etc.`,
         `- The bot detects papers shared in your server\n`,
-        `**3. Reach 100+ Quality Messages** *(you need ${Math.max(0, 100 - messages)} more)*:\n`,
+        `**3. Reach 50+ Quality Messages** *(you need ${Math.max(0, 50 - messages)} more)*:\n`,
         `- Encourage rich discussion on research topics`,
         `- Ask thoughtful, open-ended questions`,
         `- The bot tracks and filters quality messages\n`,
@@ -1903,9 +1903,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
     else if (
       currentLevel === 3 &&
       discordStats.verified &&
-      discordStats.memberCount >= 10 &&
-      discordStats.papersShared >= 25 &&
-      discordStats.messagesCount >= 100
+      discordStats.memberCount >= 5 &&
+      discordStats.papersShared >= 5 &&
+      discordStats.messagesCount >= 50
     ) {
       // Define the new level
       const newLevel = 4;
@@ -2050,9 +2050,9 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         const discordStats = await DiscordService.getByProjectId(project.id);
         if (
           discordStats &&
-          discordStats.memberCount >= 10 &&
-          discordStats.papersShared >= 25 &&
-          discordStats.messagesCount >= 100
+          discordStats.memberCount >= 5 &&
+          discordStats.papersShared >= 5 &&
+          discordStats.messagesCount >= 50
         ) {
           newLevel = 4;
           shouldLevelUp = true;
@@ -2075,12 +2075,12 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           if (!discordStats) {
             missingReqs.push('Discord stats not available');
           } else {
-            if (discordStats.memberCount < 10)
-              missingReqs.push(`Need more members (${discordStats.memberCount}/10)`);
-            if (discordStats.papersShared < 25)
-              missingReqs.push(`Need more papers shared (${discordStats.papersShared}/25)`);
-            if (discordStats.messagesCount < 100)
-              missingReqs.push(`Need more messages (${discordStats.messagesCount}/100)`);
+            if (discordStats.memberCount < 5)
+              missingReqs.push(`Need more members (${discordStats.memberCount}/5)`);
+            if (discordStats.papersShared < 5)
+              missingReqs.push(`Need more papers shared (${discordStats.papersShared}/5)`);
+            if (discordStats.messagesCount < 50)
+              missingReqs.push(`Need more messages (${discordStats.messagesCount}/50)`);
           }
           console.log(
             `Project ${project.id} doesn't meet level 4 requirements: ${missingReqs.join(', ')}`
@@ -2516,9 +2516,9 @@ async function checkAndUpdateUserLevel(project: any) {
   if (
     project.level === 3 &&
     project.Discord &&
-    project.Discord.memberCount >= 10 &&
-    project.Discord.papersShared >= 25 &&
-    project.Discord.messagesCount >= 100
+    project.Discord.memberCount >= 5 &&
+    project.Discord.papersShared >= 5 &&
+    project.Discord.messagesCount >= 50
   ) {
     await prisma.project.update({
       where: { id: project.id },
