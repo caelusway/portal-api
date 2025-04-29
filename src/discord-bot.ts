@@ -322,6 +322,11 @@ client.on(Events.MessageCreate, async (message) => {
   // Check if this is a low-value message that shouldn't count toward stats
   const isSpam = isLowValueMessage(message.content);
 
+  // --- PDF LINK DETECTION ---
+  // Detect if the message contains a direct link to a PDF (e.g., https://.../paper.pdf)
+  const pdfUrlRegex = /https?:\/\/[^\s]+\.pdf(\?[^\s]*)?/i;
+  const hasPdfLink = pdfUrlRegex.test(message.content);
+
   // Use the stricter paper detection logic from paper-detection.ts
   const hasAttachment = message.attachments.size > 0;
   let isPaper = false;
@@ -343,7 +348,15 @@ client.on(Events.MessageCreate, async (message) => {
   }
   // Only run text-based detection if no PDF-based paper was found
   if (!isPaper) {
-    isPaper = detectPaper(message.content, hasAttachment);
+    // If there's a PDF link, count as paper
+    if (hasPdfLink) {
+      isPaper = true;
+      try {
+        await message.react('📚');
+      } catch (error) {}
+    } else {
+      isPaper = detectPaper(message.content, hasAttachment);
+    }
   }
 
   // --- Paper counting block ---
@@ -403,8 +416,6 @@ client.on(Events.MessageCreate, async (message) => {
                 where: { id: project.id },
                 data: { level: 4 },
               });
-
-     
             }
             if (project.email) {
               await sendLevelUpEmail(project.email, 4);
@@ -493,12 +504,6 @@ client.on(Events.MessageCreate, async (message) => {
                   where: { id: project.id },
                   data: { level: 4 },
                 });
-
-               
-              }
-              if (project.email) {
-                await sendLevelUpEmail(project.email, 4);
-                await sendSandboxEmail(project);
               }
             }
           }

@@ -3,6 +3,7 @@ import prisma, { ProjectService } from '../services/db.service';
 
 const router = express.Router();
 
+
 /**
  * GET /api/projects/:id
  * Get project by ID
