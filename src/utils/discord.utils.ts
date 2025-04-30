@@ -1,12 +1,10 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../services/db.service';
 
 // Initialize environment variables
 dotenv.config();
 
-// Initialize Prisma client
-const prisma = new PrismaClient();
 
 // Discord bot configuration
 const DISCORD_BOT_CONFIG = {

@@ -1,5 +1,5 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../services/db.service';
 import axios from 'axios';
 import dotenv from 'dotenv';
 import {
@@ -11,8 +11,7 @@ import {
 // Load environment variables
 dotenv.config();
 
-// Initialize Prisma client
-const prisma = new PrismaClient();
+
 
 // Get API key from environment
 const API_KEY = process.env.API_KEY || process.env.PORTAL_API_KEY;

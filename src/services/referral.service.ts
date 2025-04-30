@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import prisma from './db.service';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+
 
 function generateReferralCode(): string {
   // Example: BIO-ABCD1234

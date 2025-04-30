@@ -2,9 +2,7 @@ import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
 
 // Initialize OpenAI client
 const openai = new OpenAI({
