@@ -25,7 +25,6 @@ import { activeConnections } from './websocket/ws.service';
 // Fix for missing types for pdf-parse
 // @ts-ignore
 import pdfParse from 'pdf-parse';
-import fetch from 'node-fetch';
 import OpenAI from 'openai';
 dotenv.config();
 
@@ -185,7 +184,6 @@ client.once(Events.ClientReady, async () => {
   console.log(`BioDAO Bot logged in as ${client.user?.tag}`);
   console.log(`Serving ${client.guilds.cache.size} guilds`);
 
-  
   // Register slash commands
   const commands = [
     // Existing /summarize command
@@ -230,10 +228,12 @@ client.once(Events.ClientReady, async () => {
   ];
 
   try {
+    // Use global registration by default
+    console.log('[Discord Bot] Registering global slash commands...');
     await client.application?.commands.set(commands);
-    console.log('DISCORD: Slash commands registered');
+    console.log('[Discord Bot] Global slash commands registered successfully.');
   } catch (error) {
-    console.error('Error registering slash commands:', error);
+    console.error('Error registering global slash commands:', error);
   }
 
   // Initialize tracking for all current guilds
@@ -1321,6 +1321,9 @@ async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) 
     await interaction.deferReply(); // Use deferReply here
     console.log('[Summarize] Reply deferred. Processing PDF...');
 
+    // Dynamically import node-fetch
+    const { default: fetch } = await import('node-fetch');
+
     // Download the PDF
     console.log(`[Summarize] Fetching PDF from: ${file?.url}`);
     const response = await fetch(file?.url || '');
@@ -1425,6 +1428,8 @@ async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
     console.log(`[Upload] editReply (processing status) SUCCESSFUL for interaction ID: ${interaction.id}`);
 
     // Download & Parse
+    // Dynamically import node-fetch
+    const { default: fetch } = await import('node-fetch');
     const response = await fetch(validFile.url);
     if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);
     const buffer = await response.arrayBuffer();
