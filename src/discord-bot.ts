@@ -6,6 +6,8 @@ import {
   Message,
   TextChannel,
   GuildMember,
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
 } from 'discord.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -20,6 +22,11 @@ import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
+// Fix for missing types for pdf-parse
+// @ts-ignore
+import pdfParse from 'pdf-parse';
+import fetch from 'node-fetch';
+import OpenAI from 'openai';
 dotenv.config();
 
 const PORTAL_API_URL = process.env.PORTAL_API_URL || 'http://localhost:3001';
@@ -147,6 +154,10 @@ const HELP_MESSAGES = {
 // Add at the top, after other maps:
 const processedMessageIdsByGuild: Record<string, Set<string>> = {};
 
+// --- Temporary Cache for PDF Q&A ---
+const pdfTextCache = new Map<string, { text: string; filename: string }>();
+// -----------------------------------
+
 // Initialize Discord client with necessary intents
 const client = new Client({
   intents: [
@@ -157,10 +168,73 @@ const client = new Client({
   ],
 });
 
+// --- Global Error Handlers ---
+process.on('uncaughtException', (error) => {
+  console.error('UNCAUGHT EXCEPTION:', error);
+  // Optionally exit if needed: process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  // Optionally log the promise that was rejected: console.error('Promise:', promise);
+});
+// ---------------------------
+
 // Handle bot ready event
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
   console.log(`BioDAO Bot logged in as ${client.user?.tag}`);
   console.log(`Serving ${client.guilds.cache.size} guilds`);
+
+  
+  // Register slash commands
+  const commands = [
+    // Existing /summarize command
+    {
+      name: 'summarize',
+      description: 'Summarize an uploaded scientific PDF',
+      options: [
+        {
+          name: 'file',
+          description: 'The PDF file to summarize',
+          type: 11, // ATTACHMENT type
+          required: true,
+        },
+      ],
+    },
+    // New /upload command
+    {
+      name: 'upload',
+      description: 'Upload a PDF to ask questions about it.',
+      options: [
+        {
+          name: 'file',
+          description: 'The PDF file to upload and process.',
+          type: 11, // ATTACHMENT type
+          required: true,
+        },
+      ],
+    },
+    // New /ask command
+    {
+      name: 'ask',
+      description: 'Ask a question about the last PDF you uploaded.',
+      options: [
+        {
+          name: 'question',
+          description: 'The question you want to ask about the PDF.',
+          type: 3, // STRING type
+          required: true,
+        },
+      ],
+    },
+  ];
+
+  try {
+    await client.application?.commands.set(commands);
+    console.log('DISCORD: Slash commands registered');
+  } catch (error) {
+    console.error('Error registering slash commands:', error);
+  }
 
   // Initialize tracking for all current guilds
   client.guilds.cache.forEach((guild) => {
@@ -241,6 +315,8 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
     console.error('[Discord Bot] Error notifying Portal API:', apiError);
   }
 });
+
+
 
 // Track when members join
 client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
@@ -1066,7 +1142,67 @@ export function initDiscordBot() {
       }
     });
 
+    // --- Add InteractionCreate Listener Here ---
+    client.on(Events.InteractionCreate, async (interaction) => {
+      console.log(`[InteractionCreate] Event received. Type: ${interaction.type}. Is command: ${interaction.isCommand()}.`);
+      if (!interaction.isCommand()) {
+          console.log(`[InteractionCreate] Interaction was not a command (Type: ${interaction.type}). Ignoring.`);
+          // Handle other interaction types if necessary (e.g., buttons, modals)
+          return;
+      }
+      console.log(`[InteractionCreate] Handling command: ${interaction.commandName} (ID: ${interaction.id})`);
+
+      switch (interaction.commandName) {
+        case 'summarize':
+          // Add type check for safety
+          if (interaction.isChatInputCommand()) {
+            console.log(`[InteractionCreate] Routing to handleSummarizeCommand for interaction ID: ${interaction.id}`);
+            await handleSummarizeCommand(interaction);
+          } else {
+             console.warn(`[InteractionCreate] Received summarize interaction, but it wasn't ChatInputCommand. Type: ${interaction.type}`);
+             // Optionally reply with an error if this shouldn't happen
+             if (!interaction.replied && !interaction.deferred) {
+                try {
+                   await interaction.reply({ content: "Error: Received wrong interaction type.", ephemeral: true });
+                } catch (e) { console.error("Failed to reply to wrong interaction type:", e); }
+             }
+          }
+          break;
+
+        // Add this case for /upload
+        case 'upload':
+          if (interaction.isChatInputCommand()) {
+            console.log(`[InteractionCreate] Routing to handleUploadCommand for interaction ID: ${interaction.id}`);
+            await handleUploadCommand(interaction);
+          } else {
+             console.warn(`[InteractionCreate] Received upload interaction, but it wasn't ChatInputCommand. Type: ${interaction.type}`);
+          }
+          break;
+
+        // Add this case for /ask
+        case 'ask':
+          if (interaction.isChatInputCommand()) {
+            console.log(`[InteractionCreate] Routing to handleAskCommand for interaction ID: ${interaction.id}`);
+            await handleAskCommand(interaction);
+          } else {
+             console.warn(`[InteractionCreate] Received ask interaction, but it wasn't ChatInputCommand. Type: ${interaction.type}`);
+          }
+          break;
+
+        default:
+          console.log(`[InteractionCreate] Received unhandled command: ${interaction.commandName}`);
+          // Optional: Reply for unhandled commands
+          if (!interaction.replied && !interaction.deferred) {
+             try {
+                await interaction.reply({ content: `Command '${interaction.commandName}' is not handled.`, ephemeral: true });
+             } catch (e) { console.error("Failed to reply to unhandled command:", e); }
+          }
+      }
+    });
+    // ------------------------------------------
+
     // Login to Discord
+    console.log('[initDiscordBot] Attempting to login...');
     client
       .login(DISCORD_BOT_TOKEN)
       .then(() => console.log('[Discord Bot] Login successful'))
@@ -1147,5 +1283,274 @@ async function initializeAllGuildsFromDatabase() {
   }
 }
 
+
+// Implement the summarize handler:
+async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) {
+  // Add comprehensive logging
+  console.log(`[Summarize] Handling interaction for user ${interaction.user.id} in guild ${interaction.guildId}`);
+
+  try {
+    const file = interaction.options.getAttachment('file');
+
+    // Log the received file object for debugging
+    console.log('[Summarize] Received file attachment object:', JSON.stringify(file, null, 2)); // Added log
+
+    // Robust check for PDF
+    let isPdf = false;
+    if (file && file.url) {
+      const urlLower = file.url.toLowerCase(); // Convert to lowercase
+      const urlParts = urlLower.split('?');   // Remove query parameters if they exist
+      if (urlParts[0].endsWith('.pdf')) {      // Check the part before '?'
+        isPdf = true;
+      }
+    }
+
+    // Check the result of the robust check
+    if (!isPdf) {
+      // Log the URL that failed the check
+      console.log(`[Summarize] Invalid file provided. URL check failed for: ${file?.url}`);
+      // Reply immediately for invalid file
+      await interaction.reply({ content: 'Please upload a valid PDF file.', ephemeral: true });
+      return; // Stop execution
+    }
+
+    // If we reach here, the file is considered a valid PDF
+
+    // Defer the reply immediately - IMPORTANT!
+    console.log('[Summarize] Deferring reply...');
+    await interaction.deferReply(); // Use deferReply here
+    console.log('[Summarize] Reply deferred. Processing PDF...');
+
+    // Download the PDF
+    console.log(`[Summarize] Fetching PDF from: ${file?.url}`);
+    const response = await fetch(file?.url || '');
+    if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+    }
+    const buffer = await response.arrayBuffer();
+    console.log(`[Summarize] PDF downloaded (${buffer.byteLength} bytes). Parsing...`);
+    const data = await pdfParse(Buffer.from(buffer));
+    console.log('[Summarize] PDF parsed.');
+
+    // Truncate if too long for LLM
+    let text = data.text;
+    const MAX_TEXT_LENGTH = 2000;
+    if (text.length > MAX_TEXT_LENGTH) {
+      console.log(`[Summarize] Text truncated from ${text.length} to ${MAX_TEXT_LENGTH} chars.`);
+      text = text.slice(0, MAX_TEXT_LENGTH);
+    }
+
+    // Summarize with OpenAI
+    console.log('[Summarize] Calling OpenAI API...');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4', // Consider a faster model if needed (e.g., 'gpt-3.5-turbo')
+      messages: [
+        { role: 'system', content: 'You are a scientific research assistant. Summarize the following scientific paper and provide key insights, main findings, and any notable limitations or future directions. Make sure to keep it short 2000 characters and concise.' },
+        { role: 'user', content: text }
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+    });
+    console.log('[Summarize] OpenAI API call completed.');
+
+    const summary = completion.choices[0]?.message?.content;
+    if (!summary) {
+        throw new Error('OpenAI response did not contain a summary.');
+    }
+
+    console.log('[Summarize] Sending final summary via editReply...');
+    await interaction.editReply({ // Use editReply here
+      content: `**Summary & Insights:**\n${summary}`,
+    });
+    console.log('[Summarize] Summary sent successfully.');
+
+  } catch (err) {
+    console.error('[Summarize] Error processing command:', err);
+    // Use editReply because we deferred earlier
+    try {
+        // Check if we already replied or deferred before trying to edit
+        if (interaction.replied || interaction.deferred) {
+            await interaction.editReply('Sorry, an error occurred while processing the PDF.'); // Use editReply here
+        } else {
+             // Fallback if deferral failed somehow (unlikely but safe)
+            await interaction.reply({ content: 'Sorry, an error occurred before processing could start.', ephemeral: true });
+        }
+    } catch (replyError) {
+        console.error('[Summarize] Failed to send error reply:', replyError);
+        // Cannot recover the interaction if sending the error message fails
+    }
+  }
+}
+
 // Export the client
 export { client };
+
+// --- Handler for /upload command ---
+async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
+  console.log(`[Upload] Handling interaction ID: ${interaction.id} for user ${interaction.user.id}`);
+
+  try {
+    console.log(`[Upload] Attempting deferReply for interaction ID: ${interaction.id}`);
+    await interaction.deferReply({ ephemeral: true }); // Defer ephemerally initially
+    console.log(`[Upload] deferReply SUCCESSFUL for interaction ID: ${interaction.id}`);
+
+    const file = interaction.options.getAttachment('file');
+    console.log('[Upload] Received file attachment object:', JSON.stringify(file, null, 2));
+
+    // Robust check for PDF
+    let isPdf = false;
+    let filename = 'document'; // Default filename
+    if (file && file.url) {
+      filename = file.name || filename;
+      const urlLower = file.url.toLowerCase();
+      const urlParts = urlLower.split('?');
+      if (urlParts[0].endsWith('.pdf')) {
+        isPdf = true;
+      }
+    }
+
+    if (!isPdf) {
+      console.log(`[Upload] Invalid file provided. URL check failed for: ${file?.url}`);
+      console.log(`[Upload] Attempting editReply (invalid file) for interaction ID: ${interaction.id}`);
+      await interaction.editReply({ content: 'Please upload a valid PDF file.' });
+      console.log(`[Upload] editReply (invalid file) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      return;
+    }
+    const validFile = file!; // Non-null assertion
+
+    console.log(`[Upload] Processing ${filename}... Fetching from: ${validFile.url}`);
+    console.log(`[Upload] Attempting editReply (processing status) for interaction ID: ${interaction.id}`);
+    await interaction.editReply(`⏳ Processing ${filename}...`); // Update user
+    console.log(`[Upload] editReply (processing status) SUCCESSFUL for interaction ID: ${interaction.id}`);
+
+    // Download & Parse
+    const response = await fetch(validFile.url);
+    if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);
+    const buffer = await response.arrayBuffer();
+    const data = await pdfParse(Buffer.from(buffer));
+    const extractedText = data.text;
+    console.log(`[Upload] PDF ${filename} parsed (${extractedText.length} chars). Caching for user ${interaction.user.id}`);
+
+    // Store in cache (overwrites previous for this user)
+    pdfTextCache.set(interaction.user.id, { text: extractedText, filename: filename });
+
+    // Confirm success
+    console.log(`[Upload] Attempting editReply (success) for interaction ID: ${interaction.id}`);
+    await interaction.editReply(`✅ \`${filename}\` processed! You can now use \`/ask question: [your question]\` to ask about this document.`);
+    console.log(`[Upload] editReply (success) SUCCESSFUL for interaction ID: ${interaction.id}`);
+
+  } catch (err) {
+    console.error(`[Upload] Error processing command for interaction ID: ${interaction.id}:`, err);
+    // Try to edit the reply, fallback to a new ephemeral reply if needed
+    try {
+      console.log(`[Upload] In CATCH block for interaction ID: ${interaction.id}. Checking if replied/deferred: ${interaction.replied || interaction.deferred}`);
+      if (interaction.replied || interaction.deferred) {
+        console.log(`[Upload] Attempting editReply (error) for interaction ID: ${interaction.id}`);
+        await interaction.editReply('Sorry, an error occurred while processing the PDF.');
+        console.log(`[Upload] editReply (error) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      } else {
+        console.log(`[Upload] Interaction ${interaction.id} was not replied/deferred. Attempting reply (error).`);
+        await interaction.reply({ content: 'Sorry, an error occurred.', ephemeral: true });
+        console.log(`[Upload] reply (error) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      }
+    } catch (replyError) {
+      console.error(`[Upload] Failed to send error reply for interaction ID: ${interaction.id}:`, replyError);
+    }
+  }
+}
+
+// --- Handler for /ask command ---
+async function handleAskCommand(interaction: ChatInputCommandInteraction) {
+  console.log(`[Ask] Handling interaction ID: ${interaction.id} for user ${interaction.user.id}`);
+  const question = interaction.options.getString('question', true);
+
+  try {
+    // Try to defer the reply FIRST
+    console.log(`[Ask] Attempting deferReply for interaction ID: ${interaction.id}`);
+    await interaction.deferReply();
+    console.log(`[Ask] deferReply SUCCESSFUL for interaction ID: ${interaction.id}`);
+
+    // --- Main Logic ---
+    const cachedData = pdfTextCache.get(interaction.user.id);
+
+    if (!cachedData) {
+      console.log(`[Ask] No cached PDF found for user ${interaction.user.id}`);
+      console.log(`[Ask] Attempting editReply (no cache) for interaction ID: ${interaction.id}`);
+      await interaction.editReply('No PDF found for you. Please use `/upload` first.');
+      console.log(`[Ask] editReply (no cache) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      return; // Stop processing
+    }
+
+    const { text: pdfText, filename } = cachedData;
+    console.log(`[Ask] Found cached PDF: ${filename}. Asking question: "${question}"`);
+    console.log(`[Ask] Attempting editReply (asking status) for interaction ID: ${interaction.id}`);
+    await interaction.editReply(`🤔 Asking question about \`${filename}\`...`);
+    console.log(`[Ask] editReply (asking status) SUCCESSFUL for interaction ID: ${interaction.id}`);
+
+    // Prepare prompt for LLM
+    const MAX_CONTEXT_LENGTH = 6000; // Adjust as needed
+    const context = pdfText.length > MAX_CONTEXT_LENGTH
+      ? pdfText.slice(0, MAX_CONTEXT_LENGTH) + "\n... (context truncated)"
+      : pdfText;
+
+    // Call OpenAI
+    console.log('[Ask] Calling OpenAI API...');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4', // Or a faster/cheaper model like gpt-3.5-turbo
+      messages: [
+        { role: 'system', content: `You are a helpful assistant answering questions based ONLY on the provided text from a document named '${filename}'. If the answer is not found in the text, say "The answer is not found in the provided document text."` },
+        { role: 'user', content: `Document Text:\n---\n${context}\n---\n\nQuestion: ${question}` }
+      ],
+      max_tokens: 300, // Limit answer length
+      temperature: 0.2,
+    });
+    console.log('[Ask] OpenAI API call completed.');
+
+    let answer = completion.choices[0]?.message?.content?.trim();
+    if (!answer) {
+      // If OpenAI gives no content, use a default message
+      answer = "Sorry, I couldn't generate an answer based on the document.";
+      console.warn('[Ask] OpenAI response did not contain answer content.');
+    }
+
+    // Truncate answer if needed for Discord limit
+    const DISCORD_MAX_LENGTH = 2000;
+    if (answer.length > DISCORD_MAX_LENGTH) {
+      console.log(`[Ask] Answer length (${answer.length}) exceeds Discord limit. Truncating.`);
+      answer = answer.slice(0, DISCORD_MAX_LENGTH - 20) + '... (answer truncated)';
+    }
+
+    console.log(`[Ask] Attempting final editReply (answer) for interaction ID: ${interaction.id}`);
+    // Edit the deferred reply with the final answer
+    await interaction.editReply(answer);
+    console.log(`[Ask] Final editReply (answer) SUCCESSFUL for interaction ID: ${interaction.id}`);
+    // --- End Main Logic ---
+
+  } catch (err) {
+    console.error(`[Ask] Error processing command for interaction ID: ${interaction.id}:`, err);
+    // Attempt to inform the user about the error
+    try {
+      console.log(`[Ask] In CATCH block for interaction ID: ${interaction.id}. Checking if replied/deferred: ${interaction.replied || interaction.deferred}`);
+      if (interaction.replied || interaction.deferred) {
+        // If we already replied/deferred, try editing the message
+        console.log(`[Ask] Attempting editReply (error) for interaction ID: ${interaction.id}`);
+        // Just try editing, catch if it fails
+        await interaction.editReply('Sorry, an error occurred while getting the answer.');
+        console.log(`[Ask] editReply (error) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      } else {
+        // If we couldn't even defer/reply initially, send a new reply
+        console.log(`[Ask] Interaction ${interaction.id} was not replied/deferred. Attempting reply (error).`);
+        await interaction.reply({ content: 'Sorry, an error occurred processing your request.', ephemeral: true });
+        console.log(`[Ask] reply (error) SUCCESSFUL for interaction ID: ${interaction.id}`);
+      }
+    } catch (replyError) {
+      // If even sending the error fails, log it
+      console.error(`[Ask] Failed to send error reply for interaction ID: ${interaction.id}:`, replyError);
+    }
+  }
+}
+
+
+

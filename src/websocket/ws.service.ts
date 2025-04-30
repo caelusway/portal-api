@@ -25,9 +25,6 @@ const activeConnections: Record<string, WebSocket> = {};
  */
 async function getOrCreateChatSession(userId: string): Promise<string> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     // Always check for any existing session, with no time restriction
     const existingSession = await prisma.chatSession.findFirst({
       where: {
@@ -80,9 +77,6 @@ async function saveChatMessage(
   actionSuccess?: boolean
 ): Promise<void> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     const messageContent = typeof content === 'string' ? content : content.content;
 
     await prisma.chatMessage.create({
@@ -241,8 +235,6 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
 async function checkForPendingBotNotifications(ws: WebSocket, userId: string): Promise<void> {
   try {
     console.log(`Checking for pending bot notifications for user ${userId}`);
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
 
     // Look for Discord records with recent bot installations
     const recentBotInstallations = await prisma.discord.findMany({
@@ -864,9 +856,6 @@ async function sendCoreAgentGuidance(
 ): Promise<void> {
   try {
     // Get the project with relations
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
@@ -1060,9 +1049,6 @@ async function getBotInstallationStatus(
   projectId: string
 ): Promise<{ installed: boolean; installationLink: string | null }> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     // Get the Discord server information for this user
     const discordServer = await prisma.discord.findUnique({
       where: { projectId },
@@ -1129,9 +1115,6 @@ async function handleAIInteraction(
 ): Promise<void> {
   try {
     // Get user with Discord info using Prisma directly
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     const project = await prisma.project.findUnique({
       where: {
         id: userId,
@@ -1442,9 +1425,6 @@ async function handleDiscordSetup(
     );
 
     // Check if this Discord server is already associated with this user
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     const existingDiscord = await prisma.discord.findFirst({
       where: {
         serverId: finalServerId,
@@ -1814,9 +1794,6 @@ async function checkLevelUpConditions(
   ws: WebSocket
 ): Promise<void> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     // Get complete project data for level-up checks
     const project = await prisma.project.findUnique({
       where: { id: userId },
@@ -2000,9 +1977,6 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
 
     // Get required services
 
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     console.log(
       `Checking level up criteria for project ${project.id}, current level: ${currentLevel}`
     );
@@ -2182,9 +2156,6 @@ async function handleBotInstalled(
   }
 ): Promise<void> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     // Get or create chat session first to avoid reference before declaration
     const sessionId = await getOrCreateChatSession(userId);
 
@@ -2353,9 +2324,6 @@ async function handleGuildCreate(
   memberCount: number
 ): Promise<void> {
   try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-
     console.log(`Bot added to a new server: ${guildName} (ID: ${guildId})`);
 
     // Find the Discord record internally

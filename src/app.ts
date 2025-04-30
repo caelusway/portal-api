@@ -6,7 +6,6 @@ import path from 'path';
 import apiRoutes from './routes';
 import config from './config';
 import { initWebSocketServer } from './websocket/ws.service';
-import { initDiscordClient } from './services/discord.service';
 import { initDiscordBot } from './discord-bot';
 
 // Create express app
@@ -33,9 +32,6 @@ app.use(express.static(config.publicPath));
 
 // Initialize WebSocket server
 const wss = initWebSocketServer(server);
-
-// Initialize Discord client
-const discordClient = initDiscordClient();
 
 // Initialize Discord bot if token is available
 if (config.discord.botToken) {

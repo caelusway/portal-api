@@ -1,56 +1,5 @@
 import axios from 'axios';
-import { Client, GatewayIntentBits } from 'discord.js';
 import config from '../config';
-
-// Create Discord client with necessary intents
-let discordClient: Client | null = null;
-
-/**
- * Initialize Discord client
- * @returns Discord client
- */
-export function initDiscordClient(): Client | null {
-  if (!config.discord.botToken) {
-    console.warn('Discord bot token not provided. Discord bot will not be initialized.');
-    return null;
-  }
-
-  try {
-    const client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
-      ],
-    });
-
-    // Log in to Discord
-    client
-      .login(config.discord.botToken)
-      .then(() => {
-        console.log('Discord bot is online!');
-        discordClient = client;
-      })
-      .catch((error) => {
-        console.error('Failed to log in to Discord:', error);
-        discordClient = null;
-      });
-
-    return client;
-  } catch (error) {
-    console.error('Error initializing Discord client:', error);
-    return null;
-  }
-}
-
-/**
- * Get Discord client
- * @returns Discord client
- */
-export function getDiscordClient(): Client | null {
-  return discordClient;
-}
 
 /**
  * Fetch Discord server info from invite code
