@@ -499,7 +499,7 @@ async function handleMessage(ws: WebSocket, data: any): Promise<void> {
 
     // If no action was taken directly, use the AI to respond
     if (actionTaken.length === 0) {
-      await handleAIInteraction(ws, userId, data.content, project.fullName || 'User');
+      await handleAIInteraction(ws, userId, data.content, project.name || 'User');
     }
   } catch (error) {
     console.error('Error handling message:', error);
@@ -599,7 +599,7 @@ async function handleCheckDiscordStats(ws: WebSocket, userId: string): Promise<v
     }
 
     // Get Discord info if available
-    const discord = project.Discord;
+    const discord = project.discord;
     if (!discord) {
       ws.send(
         JSON.stringify({
@@ -859,8 +859,8 @@ async function sendCoreAgentGuidance(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        NFTs: true,
-        Discord: true,
+        nfts: true,
+        discord: true,
       },
     });
 
@@ -874,21 +874,21 @@ async function sendCoreAgentGuidance(
 
     // Prepare Discord stats if available
     let discordStats = null;
-    if (project.Discord) {
+    if (project.discord) {
       discordStats = {
-        serverName: project.Discord.serverName,
-        memberCount: project.Discord.memberCount,
-        papersShared: project.Discord.papersShared,
-        messagesCount: project.Discord.messagesCount,
-        qualityScore: project.Discord.qualityScore,
-        botAdded: project.Discord.botAdded,
-        verified: project.Discord.verified,
+        serverName: project.discord.serverName,
+        memberCount: project.discord.memberCount,
+        papersShared: project.discord.papersShared,
+        messagesCount: project.discord.messagesCount,
+        qualityScore: project.discord.qualityScore,
+        botAdded: project.discord.botAdded,
+        verified: project.discord.verified,
       };
     }
 
     // Get bot installation status and URL if needed for level 2 users without bot
     let botInstallationUrl = null;
-    if (project.level === 2 && project.Discord && !project.Discord.botAdded) {
+    if (project.level === 2 && project.discord && !project.discord.botAdded) {
       const botStatus = await getBotInstallationStatus(userId);
       botInstallationUrl = botStatus.installationLink;
     }
@@ -1120,8 +1120,8 @@ async function handleAIInteraction(
         id: userId,
       },
       include: {
-        Discord: true,
-        NFTs: true,
+        discord: true,
+        nfts: true,
       },
     });
 
@@ -1136,17 +1136,18 @@ async function handleAIInteraction(
     }
 
     // Ensure we have the latest Discord stats if they exist
-    let discordStats = project.Discord;
-    if (project.level >= 2 && project.Discord) {
+    let discordStats = project.discord;
+
+    if (project.level >= 2 && project.discord) {
       // Refresh Discord stats from API if possible
       try {
-        const { inviteCode } = extractDiscordInfo(project.Discord.inviteLink);
+        const { inviteCode } = extractDiscordInfo(project.discord.inviteLink || '');
         if (inviteCode) {
           const serverInfo = await fetchDiscordServerInfo(inviteCode);
           if (serverInfo.approximateMemberCount) {
             // Update member count in database
             await prisma.discord.update({
-              where: { id: project.Discord.id },
+              where: { id: project.discord.id },
               data: {
                 memberCount: serverInfo.approximateMemberCount,
                 updatedAt: new Date(),
@@ -1155,7 +1156,7 @@ async function handleAIInteraction(
 
             // Update local copy for this request
             discordStats = {
-              ...project.Discord,
+              ...project.discord,
               memberCount: serverInfo.approximateMemberCount,
             };
 
@@ -1648,9 +1649,9 @@ async function handleNftMinting(ws: WebSocket, userId: string, nftType: string):
     let transactionHash;
     try {
       if (nftType === 'idea') {
-        transactionHash = await mintIdeaNft(project.wallet as any);
+        transactionHash = await mintIdeaNft(project.members[0].bioUser.wallet as any);
       } else if (nftType === 'vision' || nftType === 'hypothesis') {
-        transactionHash = await mintVisionNft(project.wallet as any);
+        transactionHash = await mintVisionNft(project.members[0].bioUser.wallet as any);
       } else {
         ws.send(
           JSON.stringify({
@@ -1798,8 +1799,9 @@ async function checkLevelUpConditions(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        Discord: true,
-        NFTs: true,
+        discord: true,
+        nfts: true,
+        members: { include: { bioUser: true } }, // Added this line
       },
     });
 
@@ -1868,11 +1870,11 @@ I'll help you track these metrics and provide strategies to achieve them.`;
       );
 
       // Send email notification
-      if (project.email) {
+      if (project.members[0].bioUser.email) {
         try {
-          await sendLevelUpEmail(project.email, newLevel);
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
         } catch (error) {
-          console.error(`Error sending level up email to ${project.email}:`, error);
+          console.error(`Error sending level up email to ${project.members[0].bioUser.email}:`, error);
         }
       }
     }
@@ -1939,17 +1941,17 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
       );
 
       // Send email notifications
-      if (project.email) {
+      if (project.members[0].bioUser.email) {
         try {
           // Send level up email
-          await sendLevelUpEmail(project.email, newLevel);
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
 
           // Send sandbox email for final level
           await sendSandboxEmail(project);
 
-          console.log(`Sent level ${newLevel} and sandbox emails to ${project.email}`);
+          console.log(`Sent level ${newLevel} and sandbox emails to ${project.members[0].bioUser.email}`);
         } catch (error) {
-          console.error(`Error sending emails to ${project.email}:`, error);
+          console.error(`Error sending emails to ${project.members[0].bioUser.email}:`, error);
         }
       }
     }
@@ -2001,7 +2003,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
       case 2:
         // Check level 2 to 3 conditions (Discord created with members)
         const discordInfo = await DiscordService.getByProjectId(project.id);
-        if (discordInfo && discordInfo.verified && discordInfo.memberCount >= 4) {
+        if (discordInfo && discordInfo.verified && discordInfo.memberCount && discordInfo.memberCount >= 4) {
           newLevel = 3;
           shouldLevelUp = true;
           levelUpMessage = `🎉 Congratulations! You've progressed to Level 3: Community Growth.\n\nYour next goals are:\n- Reach 10+ Discord members\n- Share 25+ scientific papers\n- Have 100+ messages in your Discord`;
@@ -2010,7 +2012,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           if (!discordInfo) missingReqs.push('Discord server not connected');
           else {
             if (!discordInfo.verified) missingReqs.push('Discord verification incomplete');
-            if (discordInfo.memberCount < 4)
+            if (discordInfo.memberCount && discordInfo.memberCount < 4)
               missingReqs.push(`Need more members (${discordInfo.memberCount}/4)`);
           }
           console.log(
@@ -2024,6 +2026,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         const discordStats = await DiscordService.getByProjectId(project.id);
         if (
           discordStats &&
+          discordStats.memberCount &&
           discordStats.memberCount >= 5 &&
           discordStats.papersShared >= 5 &&
           discordStats.messagesCount >= 50
@@ -2049,11 +2052,11 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           if (!discordStats) {
             missingReqs.push('Discord stats not available');
           } else {
-            if (discordStats.memberCount < 5)
+            if (discordStats.memberCount && discordStats.memberCount < 5)
               missingReqs.push(`Need more members (${discordStats.memberCount}/5)`);
-            if (discordStats.papersShared < 5)
+            if (discordStats.papersShared && discordStats.papersShared < 5)
               missingReqs.push(`Need more papers shared (${discordStats.papersShared}/5)`);
-            if (discordStats.messagesCount < 50)
+            if (discordStats.messagesCount && discordStats.messagesCount < 50)
               missingReqs.push(`Need more messages (${discordStats.messagesCount}/50)`);
           }
           console.log(
@@ -2163,8 +2166,9 @@ async function handleBotInstalled(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        Discord: true,
-        NFTs: true,
+        discord: true,
+        nfts: true,
+        members: { include: { bioUser: true } }, // Added this line
       },
     });
 
@@ -2279,11 +2283,11 @@ Continue growing your community and sharing valuable scientific content to progr
       );
 
       // Send level up email notification
-      if (project.email) {
+      if (project.members[0].bioUser.email) {
         try {
-          await sendLevelUpEmail(project.email, newLevel);
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
           console.log(
-            `Level up email sent to ${project.email} for level ${newLevel} (triggered by bot installation)`
+            `Level up email sent to ${project.members[0].bioUser.email} for level ${newLevel} (triggered by bot installation)`
           );
         } catch (emailError) {
           console.error(`Error sending level up email for project ${userId}:`, emailError);
@@ -2323,15 +2327,18 @@ async function handleGuildCreate(
   guildName: string,
   memberCount: number
 ): Promise<void> {
+  console.log(`[WS Service - handleGuildCreate] Received event for guild: ${guildName} (${guildId}), members: ${memberCount}`);
   try {
-    console.log(`Bot added to a new server: ${guildName} (ID: ${guildId})`);
-
+    console.log(`[WS Service - handleGuildCreate] Searching for Discord record with serverId: ${guildId}`);
     // Find the Discord record internally
     const discordRecord = await prisma.discord.findFirst({
       where: { serverId: guildId },
     });
 
     if (discordRecord) {
+      console.log(`[WS Service - handleGuildCreate] Found Discord record ID: ${discordRecord.id} for serverId: ${guildId}. ProjectId: ${discordRecord.projectId}`);
+      console.log(`[WS Service - handleGuildCreate] Attempting to update record ID: ${discordRecord.id} with botAdded: true, verified: true, memberCount: ${memberCount}`);
+
       // Update the record directly
       await prisma.discord.update({
         where: { id: discordRecord.id },
@@ -2339,16 +2346,20 @@ async function handleGuildCreate(
           botAdded: true,
           botAddedAt: new Date(),
           memberCount: memberCount,
-          verified: true,
+          verified: true, // Mark as verified upon successful bot addition
         },
       });
+      console.log(`[WS Service - handleGuildCreate] Successfully updated record ID: ${discordRecord.id}.`);
 
       // Get user and send notification
+      console.log(`[WS Service - handleGuildCreate] Looking up project with ID: ${discordRecord.projectId}`);
       const project = await prisma.project.findUnique({
         where: { id: discordRecord.projectId },
+        include: { discord: true, nfts: true, members: { include: { bioUser: true } } }, // Added members relation here
       });
 
       if (project) {
+        console.log(`[WS Service - handleGuildCreate] Found project: ${project.id}`);
         const sessionId = await getOrCreateChatSession(project.id);
         // Find the user's WebSocket connection
         const ws = activeConnections[project.id];
@@ -2372,11 +2383,12 @@ async function handleGuildCreate(
 ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify for Level 3!' : `### Next Steps:\nYou need **${4 - memberCount} more ${4 - memberCount === 1 ? 'member' : 'members'}** to reach Level 3.\n\nKeep growing your community by inviting researchers and collaborators to join your server!`}`,
         };
 
+        console.log(`[WS Service - handleGuildCreate] Saving bot added message to session ID: ${sessionId}`);
         await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
         // If the user has an active WebSocket connection, send them notifications
         if (ws && ws.readyState === WebSocket.OPEN) {
-          console.log(`Sending bot installation notification to user ${project.id}`);
+          console.log(`[WS Service - handleGuildCreate] Sending bot installation notifications via WebSocket to user ${project.id}`);
 
           // Send the text message
           ws.send(
@@ -2394,11 +2406,11 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
               type: 'discord_bot_installed',
               discord: {
                 memberCount: memberCount,
-                papersShared: 0,
-                messagesCount: 0,
-                qualityScore: 0,
+                papersShared: discordRecord.papersShared || 0, // Use current values or 0
+                messagesCount: discordRecord.messagesCount || 0,
+                qualityScore: discordRecord.qualityScore || 0,
                 verified: true,
-                serverName: guildName || 'Your Discord Server',
+                serverName: guildName || discordRecord.serverName || 'Your Discord Server',
                 botAdded: true,
                 serverId: guildId,
               },
@@ -2406,23 +2418,25 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
           );
         } else {
           console.log(
-            `User ${project.id} does not have an active WebSocket connection. Message saved to chat history only.`
+            `[WS Service - handleGuildCreate] User ${project.id} does not have an active WebSocket connection. Message saved to chat history only.`
           );
         }
 
         // Check and perform level up
-        await checkAndPerformLevelUp(project, ws);
+        console.log(`[WS Service - handleGuildCreate] Checking level up for project ${project.id}`);
+        await checkAndPerformLevelUp(project, ws); // Pass the fetched project with relations
+      } else {
+        console.warn(`[WS Service - handleGuildCreate] Project not found for projectId: ${discordRecord.projectId} after updating Discord record.`);
       }
 
       console.log(
-        `[Webhook] Successfully registered bot for Discord server ID: ${discordRecord.serverId}`
+        `[WS Service - handleGuildCreate] Successfully processed bot addition for Discord server ID: ${discordRecord.serverId}`
       );
-      console.log(`Successfully registered bot for Discord server: ${guildName || 'Unknown'}`);
     } else {
-      console.log(`Could not find Discord record for server ID: ${guildId}`);
+      console.warn(`[WS Service - handleGuildCreate] Could not find Discord record for server ID: ${guildId}. Was setup initiated via chat first?`);
     }
   } catch (error) {
-    console.error('Failed to process guildCreate event:', error);
+    console.error(`[WS Service - handleGuildCreate] Failed to process guildCreate event for guildId ${guildId}:`, error);
   }
 }
 

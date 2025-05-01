@@ -1,5 +1,6 @@
 import express from 'express';
-import prisma, { ProjectService } from '../services/db.service';
+import prisma, { ProjectService, ProjectMemberService, BioUserService, ProjectInviteService } from '../services/db.service';
+import { EmailService } from '../services/email.service';
 
 const router = express.Router();
 
@@ -64,8 +65,12 @@ router.get('/privy/:privyId', async (req: any, res: any) => {
   }
 
   try {
-    const project = await prisma.project.findUnique({
-      where: { privyId },
+    const project = await prisma.project.findFirst({
+      where: { members: { some: { bioUser: { privyId } } } },
+      include: {
+        discord: true,
+        nfts: true,
+      },
     });
 
     if (!project) {
@@ -84,14 +89,12 @@ router.post('/privy/:privyId', async (req: any, res: any) => {
   try {
     const { privyId } = req.params;
     const {
-      fullName,
-      email,
-      projectName,
-      projectDescription,
-      projectVision,
+      name,
+      description,
+      vision,
       scientificReferences,
       credentialLinks,
-      teamMembers,
+      teamDescription,
       motivation,
       progress,
       wallet,
@@ -111,24 +114,22 @@ router.post('/privy/:privyId', async (req: any, res: any) => {
     }
 
     // Check if project already exists
-    let project = await prisma.project.findUnique({
-      where: { privyId },
+    let project = await prisma.project.findFirst({
+      where: { members: { some: { bioUser: { privyId } } } 
+    },
     });
 
     if (project) {
       // Update existing project
       project = await prisma.project.update({
-        where: { privyId },
+        where: { id: project.id },
         data: {
-          wallet: wallet || project.wallet,
-          fullName: fullName || project.fullName,
-          email: email || project.email,
-          projectName: projectName || project.projectName,
-          projectDescription: projectDescription || project.projectDescription,
-          projectVision: projectVision || project.projectVision,
+          name: name || project.name,
+          description: description || project.description,
+          vision: vision || project.vision,
           scientificReferences: scientificReferences || project.scientificReferences,
           credentialLinks: credentialLinks || project.credentialLinks,
-          teamMembers: teamMembers || project.teamMembers,
+          teamDescription: teamDescription || project.teamDescription,
           motivation: motivation || project.motivation,
           progress: progress || project.progress,
         },
@@ -137,16 +138,12 @@ router.post('/privy/:privyId', async (req: any, res: any) => {
       // Create new project
       project = await prisma.project.create({
         data: {
-          privyId,
-          wallet, // Now we've validated this exists
-          fullName,
-          email,
-          projectName,
-          projectDescription,
-          projectVision,
+          name,
+          description,
+          vision,
           scientificReferences,
           credentialLinks,
-          teamMembers,
+          teamDescription,
           motivation,
           progress,
           level: 1, // Default level for new projects
@@ -175,8 +172,8 @@ router.delete('/privy/:privyId', async (req: any, res: any) => {
     }
 
     // Find the project by privyId
-    const project = await prisma.project.findUnique({
-      where: { privyId },
+    const project = await prisma.project.findFirst({
+      where: { members: { some: { bioUser: { privyId } } } },
     });
 
     if (!project) {
@@ -258,11 +255,11 @@ router.get('/wallet/:wallet', async (req: any, res: any) => {
   try {
     const { wallet } = req.params;
 
-    const project = await prisma.project.findUnique({
-      where: { wallet },
+    const project = await prisma.project.findFirst({
+      where: { members: { some: { bioUser: { wallet } } } },
       include: {
-        NFTs: true,
-        Discord: true,
+        nfts: true,
+        discord: true,
       },
     });
 
@@ -287,14 +284,12 @@ router.post('/', async (req: any, res: any) => {
     const {
       privyId,
       wallet,
-      fullName,
-      email,
-      projectName,
-      projectDescription,
-      projectVision,
+      name,
+      description,
+      vision,
       scientificReferences,
       credentialLinks,
-      teamMembers,
+      teamDescription,
       motivation,
       progress,
     } = req.body;
@@ -308,9 +303,9 @@ router.post('/', async (req: any, res: any) => {
 
     // Check if project exists with this privyId or wallet
     const existingProject = privyId
-      ? await prisma.project.findUnique({ where: { privyId } })
+      ? await prisma.project.findFirst({ where: { members: { some: { bioUser: { privyId } } } } })
       : wallet
-        ? await prisma.project.findUnique({ where: { wallet } })
+        ? await prisma.project.findFirst({ where: { members: { some: { bioUser: { wallet } } } } })
         : null;
 
     let project;
@@ -319,14 +314,12 @@ router.post('/', async (req: any, res: any) => {
       project = await prisma.project.update({
         where: { id: existingProject.id },
         data: {
-          fullName,
-          email,
-          projectName,
-          projectDescription,
-          projectVision,
+          name,
+          description,
+          vision,
           scientificReferences,
           credentialLinks,
-          teamMembers,
+          teamDescription,
           motivation,
           progress,
           // Only update these if provided
@@ -339,16 +332,12 @@ router.post('/', async (req: any, res: any) => {
       // Create new project - must have either privyId or wallet
       project = await prisma.project.create({
         data: {
-          privyId,
-          wallet: wallet || 'placeholder_' + Date.now(), // Add placeholder if not provided
-          fullName,
-          email,
-          projectName,
-          projectDescription,
-          projectVision,
+          name,
+          description,
+          vision,
           scientificReferences,
           credentialLinks,
-          teamMembers,
+          teamDescription,
           motivation,
           progress,
           level: 1, // Default to level 1
@@ -370,14 +359,12 @@ router.patch('/:id', async (req: any, res: any) => {
   try {
     const { id } = req.params;
     const {
-      fullName,
-      email,
-      projectName,
-      projectDescription,
-      projectVision,
+      name,
+      description,
+      vision,
       scientificReferences,
       credentialLinks,
-      teamMembers,
+      teamDescription,
       motivation,
       progress,
     } = req.body;
@@ -385,14 +372,12 @@ router.patch('/:id', async (req: any, res: any) => {
     const project = await prisma.project.update({
       where: { id },
       data: {
-        fullName,
-        email,
-        projectName,
-        projectDescription,
-        projectVision,
+        name,
+        description,
+        vision,
         scientificReferences,
         credentialLinks,
-        teamMembers,
+        teamDescription,
         motivation,
         progress,
         updatedAt: new Date(),
@@ -433,6 +418,68 @@ router.delete('/:id', async (req: any, res: any) => {
     return res.status(500).json({
       error: 'Failed to delete project',
     });
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/invites
+ * Send an invitation to collaborate on a project
+ */
+router.post('/:projectId/invites', async (req: any, res: any) => {
+  try {
+    const { projectId } = req.params;
+    const { userId, inviteeEmail } = req.body; // Using userId from body per current system
+    
+    if (!projectId || !userId || !inviteeEmail) {
+      return res.status(400).json({ error: 'Project ID, user ID, and invitee email are required' });
+    }
+    
+    // Verify the project exists
+    const project = await ProjectService.getById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Verify the user is a member of this project
+    const membership = await ProjectMemberService.findByUserAndProject(userId, projectId);
+    if (!membership) {
+      return res.status(403).json({ error: 'You are not a member of this project' });
+    }
+    
+    // Get the user details for email
+    const inviter = await BioUserService.getById(userId);
+    if (!inviter) {
+      return res.status(404).json({ error: 'Inviter user not found' });
+    }
+    
+    // Create the invitation
+    const { invite, token } = await ProjectInviteService.create({
+      projectId,
+      inviterUserId: userId,
+      inviteeEmail,
+      expiresInHours: 7 * 24, // Default: 7 days
+    });
+    
+    // Send the invitation email
+    await EmailService.sendCoFounderInvite(
+      inviteeEmail,
+      token,
+      inviter.fullName || 'A BioDAO user',
+      project.name || 'a BioDAO project'
+    );
+    
+    return res.status(201).json({ 
+      message: 'Invitation sent successfully',
+      invite: {
+        id: invite.id,
+        inviteeEmail: invite.inviteeEmail,
+        status: invite.status,
+        expiresAt: invite.expiresAt
+      }
+    });
+  } catch (error) {
+    console.error('Error sending project invitation:', error);
+    return res.status(500).json({ error: 'Failed to send invitation' });
   }
 });
 

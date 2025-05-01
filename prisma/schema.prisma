@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,82 +8,148 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// New Model for individual users
+model BioUser {
+  id           String    @id @default(uuid())
+  privyId      String    @unique // The User's Privy ID
+  wallet       String?   @unique // User's primary wallet address
+  email        String?   @unique
+  fullName     String?
+  avatarUrl    String?
+  referralCode String?   @unique @default(uuid()) // Auto-generate a referral code
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relationships
+  memberships  ProjectMember[]   // Projects the user is a member of
+  invitesSent  ProjectInvite[] @relation("InvitesSent") // Invites sent by the user
+  chatMessages ChatMessage[]   // Messages sent by the user
+
+  // Self-relation for referrals
+  referredById String?
+  referredBy   BioUser?        @relation("Referrals", fields: [referredById], references: [id])
+  referrals    BioUser[]       @relation("Referrals") // Users referred by this user
+}
+
+// New Model for the shared Project/DAO/Team
 model Project {
-  id                  String        @id @default(uuid())
-  wallet              String        @unique
-  privyId             String?       @unique
-  level               Int           @default(1)
-  // Additional fields from profiles table
-  fullName            String?
-  email               String?
-  projectName         String?
-  projectDescription  String?
-  projectVision       String?
-  scientificReferences String?
-  credentialLinks     String?
-  teamMembers         String?
-  motivation          String?
-  progress            String?
-  // Referral system fields
-  referralCode        String?       @unique
-  referredById        String?
-  referredBy          Project?      @relation("Referrals", fields: [referredById], references: [id])
-  referrals           Project[]     @relation("Referrals")
-  // Timestamps
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  // Relations
-  ChatSessions        ChatSession[]
-  Discord             Discord?
-  NFTs                NFT[]
+  id                 String    @id @default(uuid())
+  name               String?
+  description        String?
+  vision             String?
+  level              Int       @default(1)
+  scientificReferences String? // Consider Json type if structured data needed
+  credentialLinks    String? // Consider Json type if structured data needed
+  teamDescription    String?
+  teamMembers        String?
+  motivation         String?
+  progress           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relationships
+  members      ProjectMember[]
+  discord      Discord?        // A project can have one Discord config
+  nfts         NFT[]           // NFTs belong to the project
+  chatSessions ChatSession[]   // Chat sessions belong to the project
+  invites      ProjectInvite[] // Invites belong to the project
 }
 
+// Linking table for User <-> Project relationship with roles
+model ProjectMember {
+  id        String   @id @default(uuid())
+  role      String   // e.g., "founder", "member", "admin"
+  joinedAt  DateTime @default(now())
+
+  bioUserId String
+  bioUser   BioUser  @relation(fields: [bioUserId], references: [id], onDelete: Cascade) // Link to BioUser
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade) // Link to Project
+
+  @@unique([bioUserId, projectId]) // User can only be a member of a project once
+}
+
+// Model for tracking co-founder/member invites
+model ProjectInvite {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inviterUserId String
+  inviter       BioUser   @relation("InvitesSent", fields: [inviterUserId], references: [id])
+  inviteeEmail  String    // Email the invite was sent to
+  token         String    @unique // Secure, single-use token
+  status        String    @default("pending") // "pending", "accepted", "expired", "revoked"
+  expiresAt     DateTime  // Set an expiry time for the token
+  createdAt     DateTime  @default(now())
+}
+
+// Updated NFT Model
 model NFT {
-  id             String   @id @default(uuid())
-  type           String
-  mintedAt       DateTime @default(now())
-  projectId      String
-  project        Project  @relation(fields: [projectId], references: [id])
+  id              String   @id @default(uuid())
+  type            String // e.g., "idea", "vision"
+  mintedAt        DateTime @default(now())
   transactionHash String?
-  imageUrl       String?
+  imageUrl        String?
+
+  // Relation to the new Project model
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
+// Updated Discord Model
 model Discord {
   id                String    @id @default(uuid())
-  serverId          String
-  memberCount       Int       @default(0)
+  serverId          String    @unique // Keep Discord Server ID unique
+  inviteLink        String?
+  memberCount       Int?
   papersShared      Int       @default(0)
   messagesCount     Int       @default(0)
-  qualityScore      Int       @default(0)
-  projectId         String    @unique
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  inviteLink        String
+  qualityScore      Int       @default(50)
+  serverName        String?
+  serverIcon        String?
   botAdded          Boolean   @default(false)
   botAddedAt        DateTime?
-  verificationToken String?
-  verified          Boolean   @default(false)
-  serverIcon        String?
-  serverName        String?
-  project           Project   @relation(fields: [projectId], references: [id])
+  verified          Boolean   @default(false) // Requires bot to be added AND potentially a check
+  verificationToken String?   @unique // Token used in bot install URL state param
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation to the new Project model (still unique per project)
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
+// Updated ChatSession Model
 model ChatSession {
-  id        String        @id @default(uuid())
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation to the new Project model
   projectId String
-  startedAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  messages  ChatMessage[]
-  project   Project       @relation(fields: [projectId], references: [id])
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Relation to Messages
+  messages ChatMessage[]
 }
 
+// Updated ChatMessage Model
 model ChatMessage {
-  id            String      @id @default(uuid())
-  content       String
-  isFromAgent   Boolean     @default(false)
-  timestamp     DateTime    @default(now())
+  id            String   @id @default(uuid())
   sessionId     String
-  actionTaken   String?
-  actionSuccess Boolean?
-  session       ChatSession @relation(fields: [sessionId], references: [id])
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  timestamp     DateTime @default(now())
+  content       String   @db.Text // Use Text for potentially long messages
+  isFromAgent   Boolean
+  actionTaken   String?  // e.g., MINT_NFT, DISCORD_SETUP
+  actionSuccess Boolean? // true/false if action was attempted
+
+  // Optional relationship to BioUser for authorship
+  bioUserId String?
+  bioUser   BioUser? @relation(fields: [bioUserId], references: [id], onDelete: SetNull) // SetNull if user is deleted
 }
+
+// --- The OLD Project model definition should be REMOVED ---
+// model Project { ... } // DELETE THIS OLD DEFINITION

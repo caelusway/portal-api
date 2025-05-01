@@ -286,33 +286,34 @@ const qualityScoreByGuild: Record<string, number> = {};
 
 // Handle guild join event
 client.on(Events.GuildCreate, async (guild: Guild) => {
-  console.log(`[Discord Bot] Added to guild: ${guild.name} (${guild.id})`);
+  console.log(`[Discord Bot - GuildCreate] Bot added to guild: ${guild.name} (${guild.id})`);
 
   // Initialize stats tracking for this guild
   initializeGuildStats(guild);
 
   try {
+    console.log(`[Discord Bot - GuildCreate] Dynamically importing ws.service for guild ${guild.id}...`);
     // Import dynamically to avoid circular dependencies
     const wsService = await import('./websocket/ws.service');
     console.log(
-      `[Discord Bot] Successfully imported ws.service, calling handleGuildCreate for guild ${guild.id}`
+      `[Discord Bot - GuildCreate] Successfully imported ws.service. Attempting to call handleGuildCreate for guild ${guild.id}`
     );
 
     // Use the ws.service handler to process the event and notify users
     await wsService.handleGuildCreate(guild.id, guild.name, guild.memberCount);
-    console.log(`[Discord Bot] handleGuildCreate completed for guild ${guild.id}`);
+    console.log(`[Discord Bot - GuildCreate] handleGuildCreate call completed for guild ${guild.id}`);
   } catch (error) {
-    console.error('[Discord Bot] Error calling handleGuildCreate:', error);
+    console.error(`[Discord Bot - GuildCreate] Error calling wsService.handleGuildCreate for guild ${guild.id}:`, error);
     // Even if there's an error with the WebSocket service, still try to notify the Portal API
   }
 
   try {
     // Also notify the Portal API about this new guild
-    console.log(`[Discord Bot] Notifying Portal API about new guild ${guild.id}`);
+    console.log(`[Discord Bot - GuildCreate] Notifying Portal API about new guild ${guild.id}`);
     await notifyPortalAPI(guild.id, 'guildCreate');
-    console.log(`[Discord Bot] Portal API notification completed for guild ${guild.id}`);
+    console.log(`[Discord Bot - GuildCreate] Portal API notification completed for guild ${guild.id}`);
   } catch (apiError) {
-    console.error('[Discord Bot] Error notifying Portal API:', apiError);
+    console.error(`[Discord Bot - GuildCreate] Error notifying Portal API for guild ${guild.id}:`, apiError);
   }
 });
 
@@ -1428,7 +1429,7 @@ async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
     console.log(`[Upload] editReply (processing status) SUCCESSFUL for interaction ID: ${interaction.id}`);
 
     // Download & Parse
-    // Dynamically import node-fetch
+    // Dynamically import node-fetch here as well
     const { default: fetch } = await import('node-fetch');
     const response = await fetch(validFile.url);
     if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);

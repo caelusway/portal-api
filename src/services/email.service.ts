@@ -172,7 +172,108 @@ export async function sendSandboxEmail(project: any): Promise<void> {
   }
 }
 
+/**
+ * Email Service for sending co-founder invitations
+ * This is exported directly for easier importing
+ */
+export const EmailService = {
+  sendCoFounderInvite: async (
+    recipientEmail: string,
+    inviteToken: string,
+    inviterName: string,
+    projectName: string
+  ): Promise<void> => {
+    try {
+      // Build the invitation URL with correct path format
+      const frontendUrl = process.env.FRONTEND_URL || 'https://app.biodao.xyz';
+      const inviteUrl = `${frontendUrl}/accept-invite?token=${inviteToken}`;
+
+      // Prepare email content
+      const subject = `${inviterName} has invited you to collaborate on ${projectName}`;
+      
+      // Plain text version
+      const message = `
+Hello,
+
+${inviterName} has invited you to collaborate on the BioDAO project "${projectName}".
+
+To accept this invitation, please follow this link:
+${inviteUrl}
+
+This invitation will expire in 7 days.
+
+Best,
+The BioDAO Team
+      `;
+      
+      // HTML version
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #f0f0f0; padding: 20px; border-radius: 5px 5px 0 0; }
+    .content { padding: 20px; background: #fff; border-radius: 0 0 5px 5px; }
+    .button { 
+      display: inline-block; 
+      padding: 10px 20px; 
+      background-color: #3B82F6; 
+      color: white; 
+      text-decoration: none; 
+      border-radius: 5px; 
+      margin: 20px 0;
+    }
+    .footer { margin-top: 20px; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Join ${projectName} on BioDAO</h2>
+    </div>
+    <div class="content">
+      <p>Hello,</p>
+      <p><strong>${inviterName}</strong> has invited you to collaborate on the BioDAO project "<strong>${projectName}</strong>".</p>
+      <p>BioDAO is a platform for scientific collaboration and community building.</p>
+      <p>
+        <a href="${inviteUrl}" class="button">Accept Invitation</a>
+      </p>
+      <p>This invitation will expire in 7 days.</p>
+      <p>Best,<br>The BioDAO Team</p>
+    </div>
+    <div class="footer">
+      <p>If you're having trouble with the button above, copy and paste the URL below into your web browser:</p>
+      <p>${inviteUrl}</p>
+    </div>
+  </div>
+</body>
+</html>
+      `;
+
+      // Send the email using Mailgun
+      const data = await mg.messages.create(MAILGUN_DOMAIN, {
+        from: FROM_EMAIL,
+        to: recipientEmail,
+        subject: subject,
+        text: message,
+        html: html,
+      });
+
+      console.log(`Co-founder invitation email sent to ${recipientEmail}. Response:`, data);
+    } catch (error) {
+      console.error('Failed to send co-founder invitation email:', error);
+    }
+  },
+  
+  // Add other email service methods as needed
+  sendLevelUpEmail,
+  sendSandboxEmail,
+};
+
 module.exports = {
   sendLevelUpEmail,
   sendSandboxEmail,
+  EmailService,
 };
