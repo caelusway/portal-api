@@ -416,11 +416,6 @@ router.get('/debug/discord-stats/:serverId', async (req: any, res: any) => {
  */
 router.post('/bot-installed', async (req: any, res: any) => {
   try {
-    // Verify API key
-    const apiKey = req.body.apiKey || req.headers.authorization?.replace('Bearer ', '');
-    if (apiKey !== API_KEY) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
 
     const { guildId, guildName, memberCount } = req.body;
 

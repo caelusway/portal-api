@@ -300,6 +300,7 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
 
     // Use the ws.service handler to process the event and notify users
     await wsService.handleGuildCreate(guild.id, guild.name, guild.memberCount);
+    
     console.log(`[Discord Bot] handleGuildCreate completed for guild ${guild.id}`);
   } catch (error) {
     console.error('[Discord Bot] Error calling handleGuildCreate:', error);
@@ -310,6 +311,7 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
     // Also notify the Portal API about this new guild
     console.log(`[Discord Bot] Notifying Portal API about new guild ${guild.id}`);
     await notifyPortalAPI(guild.id, 'guildCreate');
+
     console.log(`[Discord Bot] Portal API notification completed for guild ${guild.id}`);
   } catch (apiError) {
     console.error('[Discord Bot] Error notifying Portal API:', apiError);
@@ -475,9 +477,9 @@ client.on(Events.MessageCreate, async (message) => {
           );
           if (
             project.level === 3 &&
-            updatedRecord.memberCount >= 5 &&
-            updatedRecord.papersShared >= 5 &&
-            updatedRecord.messagesCount >= 50
+            project.Discord?.memberCount &&
+            project.Discord?.papersShared >= 5 &&
+            project.Discord?.messagesCount >= 50
           ) {
             console.log(
               `[Paper Detection] Project ${project.id} meets level 4 requirements after paper detection!`
