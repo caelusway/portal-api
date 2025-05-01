@@ -19,7 +19,7 @@ import {
 } from './paper-detection';
 import prisma from './services/db.service';
 import { WebSocketServer, WebSocket as WS } from 'ws';
-import { checkAndPerformLevelUp, checkAndUpdateUserLevel } from './websocket/ws.service';
+import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
 // Fix for missing types for pdf-parse
@@ -1096,7 +1096,7 @@ export function initDiscordBot() {
   // Initialize event listeners if not already set up
   if (!client.isReady()) {
     // Set up event handlers
-    client.once('ready', () => {
+    client.once(Events.ClientReady, () => {
       console.log(`[Discord Bot] Logged in as ${client.user?.tag}`);
       console.log(`[Discord Bot] Serving ${client.guilds.cache.size} guilds`);
 
@@ -1113,7 +1113,7 @@ export function initDiscordBot() {
     });
 
     // Handle guild creation (bot added to new server)
-    client.on('guildCreate', async (guild) => {
+    client.on(Events.GuildCreate, async (guild) => {
       console.log(`[Discord Bot] Added to guild: ${guild.name} (${guild.id})`);
 
       // Initialize stats for this guild
@@ -1141,6 +1141,24 @@ export function initDiscordBot() {
         console.log(`[Discord Bot] Portal API notification completed for guild ${guild.id}`);
       } catch (apiError) {
         console.error('[Discord Bot] Error notifying Portal API:', apiError);
+      }
+    });
+
+    // Track when members join
+    client.on(Events.GuildMemberAdd, async (member) => {
+      const guild = member.guild;
+      console.log(`New member joined ${guild.name}: ${member.user.username}`);
+
+      // Update member count immediately when someone joins
+      await notifyPortalAPI(guild.id, 'stats_update');
+
+      // Check level requirements when specific member count thresholds are hit
+      const memberCount = guild.memberCount;
+      if (memberCount === 4 || memberCount === 10 || memberCount % 5 === 0) {
+        console.log(
+          `[Discord Bot] Member milestone reached (${memberCount}) - checking level requirements`
+        );
+        await checkGuildLevelRequirements(guild.id);
       }
     });
 
