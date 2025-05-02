@@ -326,6 +326,7 @@ async function checkForPendingBotNotifications(ws: WebSocket, userId: string): P
 Your Discord server is now fully verified and stats are being tracked automatically.`,
           };
 
+          /*
           ws.send(
             JSON.stringify({
               type: 'message',
@@ -352,6 +353,7 @@ Your Discord server is now fully verified and stats are being tracked automatica
               },
             })
           );
+          */
         }
       }
     } else {
@@ -2324,6 +2326,7 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
     //await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
     // Send the notification over WebSocket
+    /*
     ws.send(
       JSON.stringify({
         type: 'message',
@@ -2347,6 +2350,7 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
         },
       })
     );
+    */
 
     // After bot is installed, always check level-up conditions using the proper mechanism
     if (project) {
