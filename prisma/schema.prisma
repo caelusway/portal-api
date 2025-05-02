@@ -8,43 +8,41 @@ datasource db {
 }
 
 model Project {
-  id                  String        @id @default(uuid())
-  wallet              String        @unique
-  privyId             String?       @unique
-  level               Int           @default(1)
-  // Additional fields from profiles table
-  fullName            String?
-  email               String?
-  projectName         String?
-  projectDescription  String?
-  projectVision       String?
+  id                   String        @id @default(uuid())
+  wallet               String        @unique
+  privyId              String?       @unique
+  level                Int           @default(1)
+  fullName             String?
+  email                String?
+  projectName          String?
+  projectDescription   String?
+  projectVision        String?
   scientificReferences String?
-  credentialLinks     String?
-  teamMembers         String?
-  motivation          String?
-  progress            String?
-  // Referral system fields
-  referralCode        String?       @unique
-  referredById        String?
-  referredBy          Project?      @relation("Referrals", fields: [referredById], references: [id])
-  referrals           Project[]     @relation("Referrals")
-  // Timestamps
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  // Relations
-  ChatSessions        ChatSession[]
-  Discord             Discord?
-  NFTs                NFT[]
+  credentialLinks      String?
+  teamMembers          String?
+  motivation           String?
+  progress             String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  referralCode         String?       @unique
+  referredById         String?
+  referralSource       String?
+  projectLinks         String?
+  ChatSessions         ChatSession[]
+  Discord              Discord?
+  NFTs                 NFT[]
+  referredBy           Project?      @relation("Referrals", fields: [referredById], references: [id])
+  referrals            Project[]     @relation("Referrals")
 }
 
 model NFT {
-  id             String   @id @default(uuid())
-  type           String
-  mintedAt       DateTime @default(now())
-  projectId      String
-  project        Project  @relation(fields: [projectId], references: [id])
+  id              String   @id @default(uuid())
+  type            String
+  mintedAt        DateTime @default(now())
+  projectId       String
   transactionHash String?
-  imageUrl       String?
+  imageUrl        String?
+  project         Project  @relation(fields: [projectId], references: [id])
 }
 
 model Discord {
@@ -54,7 +52,6 @@ model Discord {
   papersShared      Int       @default(0)
   messagesCount     Int       @default(0)
   qualityScore      Int       @default(0)
-  projectId         String    @unique
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   inviteLink        String
@@ -64,14 +61,15 @@ model Discord {
   verified          Boolean   @default(false)
   serverIcon        String?
   serverName        String?
+  projectId         String    @unique
   project           Project   @relation(fields: [projectId], references: [id])
 }
 
 model ChatSession {
   id        String        @id @default(uuid())
-  projectId String
   startedAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  projectId String
   messages  ChatMessage[]
   project   Project       @relation(fields: [projectId], references: [id])
 }
