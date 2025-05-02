@@ -1869,7 +1869,7 @@ async function checkLevelUpConditions(
     
 
     // Level 2 to Level 3: Need 4+ Discord members and verified status
-    if (currentLevel === 2 && discordStats.verified && discordStats.memberCount >= 4) {
+    if (currentLevel === 2 && discordStats && discordStats.verified && discordStats.memberCount >= 4) {
       // Define the new level
       const newLevel = 3;
 
@@ -2204,7 +2204,7 @@ async function sendSandboxEmail(project: any) {
 }
 
 /**
- * Handle notification when a bot is successfully added to a Discord server
+ * Handle notification when a bot is successfully installed to a Discord server
  * @param ws WebSocket connection
  * @param userId User ID
  * @param serverDetails Discord server details
@@ -2305,57 +2305,23 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
       })
     );
 
-    // Check for level up if applicable
-    if (project && project.level === 2 && serverDetails.memberCount >= 4) {
-      const newLevel = 3; // Define variable instead of hardcoding
-      await prisma.project.update({
-        where: { id: userId },
-        data: { level: newLevel },
-      });
-
-      const levelUpMessage = {
-        content: `## Level ${newLevel} Unlocked! 🚀
-
-**Congratulations!** Your BioDAO community now has **${serverDetails.memberCount} members**. You've advanced to **Level ${newLevel}!**
-
-### New Level Requirements:
-- Increase to **10 community members** (currently: ${serverDetails.memberCount})
-- Share **25 scientific papers** in your Discord
-- Reach **100 quality messages** in your server
-
-Continue growing your community and sharing valuable scientific content to progress to Level 4!`,
-      };
-
-      await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
-
-      ws.send(
-        JSON.stringify({
-          type: 'level_up',
-          level: newLevel,
-          message: levelUpMessage.content,
-          nextLevelRequirements: [
-            'Grow your community to 10+ Discord members',
-            'Share at least 25 scientific papers in your server',
-            'Reach 100+ quality messages in your community',
-          ],
-        })
+    // After bot is installed, always check level-up conditions using the proper mechanism
+    if (project) {
+      // Pass in the updated Discord stats for immediate level-up check
+      await checkLevelUpConditions(
+        userId, 
+        project.level, 
+        {
+          verified: true,
+          memberCount: serverDetails.memberCount,
+          papersShared: 0,
+          messagesCount: 0,
+          qualityScore: 0,
+          botAdded: true
+        },
+        ws
       );
-
-      // Send level up email notification
-      if (project.email) {
-        try {
-          await sendLevelUpEmail(project.email, newLevel);
-          console.log(
-            `Level up email sent to ${project.email} for level ${newLevel} (triggered by bot installation)`
-          );
-        } catch (emailError) {
-          console.error(`Error sending level up email for project ${userId}:`, emailError);
-        }
-      }
     }
-
-    // Check and perform level up
-    await checkAndPerformLevelUp(project, ws);
 
     console.log(
       `Discord bot installation processed for user ${userId}, server: ${serverDetails.guildName || serverDetails.guildId}`
@@ -2467,14 +2433,27 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
               },
             })
           );
+          
+          // Check for level up using the standardized mechanism
+          await checkLevelUpConditions(
+            project.id,
+            project.level,
+            {
+              verified: true,
+              memberCount: memberCount,
+              papersShared: 0,
+              messagesCount: 0,
+              qualityScore: 0,
+              botAdded: true,
+              serverId: guildId
+            },
+            ws
+          );
         } else {
           console.log(
             `User ${project.id} does not have an active WebSocket connection. Message saved to chat history only.`
           );
         }
-
-        // Check and perform level up
-        await checkAndPerformLevelUp(project, ws);
       }
 
       console.log(
@@ -2501,34 +2480,50 @@ async function checkAndUpdateUserLevel(project: any) {
     project.Discord.botAdded &&
     project.Discord.memberCount >= 4
   ) {
+    const newLevel = 3;
+    
     await prisma.project.update({
       where: { id: project.id },
-      data: { level: 3 },
+      data: { level: newLevel },
     });
 
-    // Notify user about level up
+    // Get session for chat history
     const sessionId = await getOrCreateChatSession(project.id);
-    const levelUpMessage =
-      "Congratulations! Your BioDAO community now has 4 members. You've advanced to Level 3!";
+    
+    // Create a properly formatted level-up message that matches other level-up notifications
+    const levelUpMessage = `## Level ${newLevel} Unlocked! 🎉
 
+**Congratulations!** Your BioDAO community now has **${project.Discord.memberCount} members**, which means you've advanced to **Level ${newLevel}!**
+
+To advance to Level 4, you'll need to:
+1. **Grow your community to 10+ members**
+2. **Share 25+ scientific papers** in your Discord
+3. **Reach 100+ quality messages**
+
+I'll help you track these metrics and provide strategies to achieve them.`;
+
+    // Save level-up message to chat
     await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
 
     // Send notification if user is connected
     const userConnection = activeConnections[project.id];
     if (userConnection) {
+      // Send level-up message as a regular chat message
       userConnection.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
-          action: 'LEVEL_UP',
           isFromAgent: true,
+          action: 'LEVEL_UP',
         })
       );
+      
+      // Also send dedicated level-up event with proper metadata
       userConnection.send(
         JSON.stringify({
           type: 'level_up',
           previousLevel: 2,
-          newLevel: 3,
+          newLevel: newLevel,
           message: levelUpMessage,
           nextLevelRequirements: [
             'Grow your community to 10+ Discord members',
@@ -2540,7 +2535,13 @@ async function checkAndUpdateUserLevel(project: any) {
     }
 
     // Send level up email
-    await sendLevelUpEmail(project.email, 3);
+    if (project.email) {
+      try {
+        await sendLevelUpEmail(project.email, newLevel);
+      } catch (error) {
+        console.error(`Error sending level up email to ${project.email}:`, error);
+      }
+    }
   }
 
   // Level 4 requires 10 Discord members, 25 papers, 100 messages
@@ -2551,34 +2552,50 @@ async function checkAndUpdateUserLevel(project: any) {
     project.Discord.papersShared >= 5 &&
     project.Discord.messagesCount >= 50
   ) {
+    const newLevel = 4;
+    
     await prisma.project.update({
       where: { id: project.id },
-      data: { level: 4 },
+      data: { level: newLevel },
     });
 
-    // Notify user about level up
+    // Get session for chat history
     const sessionId = await getOrCreateChatSession(project.id);
-    const levelUpMessage =
-      "Congratulations! Your BioDAO community has reached critical mass with 10+ members, 25+ papers shared, and 100+ messages. You've advanced to Level 4! You now have access to the BioDAO sandbox. The Bio team will reach out to you via email shortly to schedule a call to discuss next steps.";
+    
+    // Create a properly formatted level-up message that matches other level-up notifications
+    const levelUpMessage = `## Level ${newLevel} Unlocked! 🎉
 
+**Congratulations!** Your BioDAO community has reached critical mass with:
+- **${project.Discord.memberCount} members**
+- **${project.Discord.papersShared} scientific papers shared**
+- **${project.Discord.messagesCount} messages** in your server
+
+You've advanced to **Level ${newLevel}** and now have access to the BioDAO sandbox!
+
+The Bio team will contact you via email shortly to schedule a call to discuss your next steps.`;
+
+    // Save level-up message to chat
     await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
 
     // Send notification if user is connected
     const userConnection = activeConnections[project.id];
     if (userConnection) {
+      // Send level-up message as a regular chat message
       userConnection.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
-          action: 'LEVEL_UP',
           isFromAgent: true,
+          action: 'LEVEL_UP',
         })
       );
+      
+      // Also send dedicated level-up event with proper metadata
       userConnection.send(
         JSON.stringify({
           type: 'level_up',
           previousLevel: 3,
-          newLevel: 4,
+          newLevel: newLevel,
           message: levelUpMessage,
           nextLevelRequirements: [
             'All requirements completed - congratulations!',
@@ -2589,8 +2606,18 @@ async function checkAndUpdateUserLevel(project: any) {
       );
     }
 
-    // Send sandbox notification email to James
-    await sendSandboxEmail(project);
+    // Send email notifications
+    if (project.email) {
+      try {
+        // Send level up email
+        await sendLevelUpEmail(project.email, newLevel);
+        
+        // Send sandbox email for final level
+        await sendSandboxEmail(project);
+      } catch (error) {
+        console.error(`Error sending emails to ${project.email}:`, error);
+      }
+    }
   }
 }
 
