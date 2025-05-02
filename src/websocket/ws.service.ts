@@ -996,7 +996,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
           `- Discord server connected ✅`,
           `- Verification bot installed ❌`,
           `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
-          `**Next Step: Install Verification Bot**\n`,
+          `**Next Step: Install Verification Bot** ${getBotInstallationUrl()}\n`,
           `- I've sent you a link to install our verification bot in a separate message`,
           `- This bot is required to track your community metrics automatically`,
           `- Without the bot, we can't verify your progress toward level-ups\n`,
