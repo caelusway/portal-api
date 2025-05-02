@@ -2321,7 +2321,7 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
     };
 
     // Save the message to the chat history
-    await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
+    //await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
     // Send the notification over WebSocket
     ws.send(
