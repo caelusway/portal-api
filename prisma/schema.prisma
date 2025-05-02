@@ -95,7 +95,7 @@ model Discord {
 // Updated ChatSession Model
 model ChatSession {
   id        String        @id @default(uuid())
-  startedAt DateTime      @default(now())
+  createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   projectId String
   messages  ChatMessage[]
