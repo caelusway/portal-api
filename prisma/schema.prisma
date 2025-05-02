@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,8 +16,7 @@ model BioUser {
   fullName     String?
   avatarUrl    String?
   referralCode String?   @unique @default(uuid()) // Auto-generate a referral code
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+
 
   // Relationships
   memberships  ProjectMember[]   // Projects the user is a member of
@@ -29,14 +27,17 @@ model BioUser {
   referredById String?
   referredBy   BioUser?        @relation("Referrals", fields: [referredById], references: [id])
   referrals    BioUser[]       @relation("Referrals") // Users referred by this user
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 // New Model for the shared Project/DAO/Team
 model Project {
-  id                   String        @id @default(uuid())
-  wallet               String        @unique
-  privyId              String?       @unique
-  level                Int           @default(1)
+  id                   String           @id @default(uuid())
+  wallet               String           @unique
+  privyId              String?          @unique
+  level                Int              @default(1)
   fullName             String?
   email                String?
   projectName          String?
@@ -47,27 +48,29 @@ model Project {
   teamMembers          String?
   motivation           String?
   progress             String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  referralCode         String?       @unique
+  referralCode         String?          @unique
   referredById         String?
   referralSource       String?
   projectLinks         String?
   ChatSessions         ChatSession[]
   Discord              Discord?
   NFTs                 NFT[]
-  referredBy           Project?      @relation("Referrals", fields: [referredById], references: [id])
-  referrals            Project[]     @relation("Referrals")
+  members              ProjectMember[]
+  invites              ProjectInvite[]
+  referredBy           Project?         @relation("Referrals", fields: [referredById], references: [id])
+  referrals            Project[]        @relation("Referrals")
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
 }
 
 model NFT {
   id              String   @id @default(uuid())
   type            String
-  mintedAt        DateTime @default(now())
   projectId       String
   transactionHash String?
   imageUrl        String?
   project         Project  @relation(fields: [projectId], references: [id])
+  mintedAt        DateTime @default(now())
 }
 
 // Updated Discord Model
@@ -79,9 +82,6 @@ model Discord {
   papersShared      Int       @default(0)
   messagesCount     Int       @default(0)
   qualityScore      Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  inviteLink        String
   botAdded          Boolean   @default(false)
   botAddedAt        DateTime?
   verificationToken String?
@@ -90,16 +90,18 @@ model Discord {
   serverName        String?
   projectId         String    @unique
   project           Project   @relation(fields: [projectId], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 // Updated ChatSession Model
 model ChatSession {
   id        String        @id @default(uuid())
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
   projectId String
   messages  ChatMessage[]
   project   Project       @relation(fields: [projectId], references: [id])
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 }
 
 model ChatMessage {
@@ -117,5 +119,31 @@ model ChatMessage {
   bioUser   BioUser? @relation(fields: [bioUserId], references: [id], onDelete: SetNull) // SetNull if user is deleted
 }
 
-// --- The OLD Project model definition should be REMOVED ---
-// model Project { ... } // DELETE THIS OLD DEFINITION
+// Linking table for User <-> Project relationship with roles
+model ProjectMember {
+  id        String   @id @default(uuid())
+  role      String   // e.g., "founder", "member", "admin"
+  joinedAt  DateTime @default(now())
+
+  bioUserId String
+  bioUser   BioUser  @relation(fields: [bioUserId], references: [id], onDelete: Cascade) // Link to BioUser
+
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade) // Link to Project
+
+  @@unique([bioUserId, projectId]) // User can only be a member of a project once
+}
+
+// Model for tracking co-founder/member invites
+model ProjectInvite {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inviterUserId String
+  inviter       BioUser   @relation("InvitesSent", fields: [inviterUserId], references: [id])
+  inviteeEmail  String    // Email the invite was sent to
+  token         String    @unique // Secure, single-use token
+  status        String    @default("pending") // "pending", "accepted", "expired", "revoked"
+  expiresAt     DateTime  // Set an expiry time for the token
+  createdAt     DateTime  @default(now())
+}
