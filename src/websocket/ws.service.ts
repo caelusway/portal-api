@@ -21,6 +21,13 @@ const activeConnections: Record<string, WebSocket> = {};
 // Add a map to track servers that have already had bot installation notifications
 const botInstallNotificationSent = new Map<string, boolean>();
 
+// Function to set the notification status for a server
+function setServerBotNotificationSent(serverId: string, status: boolean): void {
+  const oldStatus = botInstallNotificationSent.get(serverId);
+  botInstallNotificationSent.set(serverId, status);
+  console.log(`[Deduplication] Bot notification status for server ${serverId} changed from ${oldStatus} to ${status}`);
+}
+
 // Add a map to track recent level-up notifications to prevent duplicates
 const recentLevelUpsByUser = new Map<string, Map<number, number>>();
 
@@ -2397,6 +2404,14 @@ async function handleGuildCreate(
 ): Promise<void> {
   try {
     console.log(`Bot added to a new server: ${guildName} (ID: ${guildId})`);
+    
+    // Check if we've already sent a notification for this server
+    // This prevents duplicate messages when both the Discord API and our app
+    // detect the bot installation at nearly the same time
+    if (botInstallNotificationSent.get(guildId)) {
+      console.log(`Skipping handleGuildCreate for ${guildId} - notification already sent`);
+      return;
+    }
 
     // Find the Discord record internally
     const discordRecord = await prisma.discord.findFirst({
@@ -2710,13 +2725,21 @@ function wasLevelUpRecentlySent(userId: string, newLevel: number): boolean {
   const now = Date.now();
   const userLevelUps = recentLevelUpsByUser.get(userId);
   
-  if (!userLevelUps) return false;
+  if (!userLevelUps) {
+    console.log(`[Deduplication] No level-up history for user ${userId}`);
+    return false;
+  }
   
   const lastSentTimestamp = userLevelUps.get(newLevel);
-  if (!lastSentTimestamp) return false;
+  if (!lastSentTimestamp) {
+    console.log(`[Deduplication] No previous level ${newLevel} notification for user ${userId}`);
+    return false;
+  }
   
-  // Consider a level-up notification as "recent" if it was sent in the last 60 seconds
-  return (now - lastSentTimestamp) < 30000; // 60 seconds
+  // Consider a level-up notification as "recent" if it was sent in the last 30 seconds
+  const isRecent = (now - lastSentTimestamp) < 30000; // 30 seconds
+  console.log(`[Deduplication] Level ${newLevel} notification for user ${userId} was sent ${(now - lastSentTimestamp)/1000}s ago, considered ${isRecent ? 'recent' : 'not recent'}`);
+  return isRecent;
 }
 
 // Function to record that a level-up notification was sent
@@ -2729,6 +2752,7 @@ function recordLevelUpSent(userId: string, newLevel: number): void {
   }
   
   userLevelUps.set(newLevel, Date.now());
+  console.log(`[Deduplication] Recorded level ${newLevel} notification for user ${userId} at ${new Date().toISOString()}`);
 }
 
 export {
@@ -2738,4 +2762,5 @@ export {
   handleGuildCreate,
   checkAndPerformLevelUp,
   checkAndUpdateUserLevel,
+  setServerBotNotificationSent
 };
