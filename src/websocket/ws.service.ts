@@ -988,23 +988,37 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
       const membersNeeded = 4 - currentMembers;
       const botInstalled = project.Discord?.botAdded || false;
       
-      if (!botInstalled) {
-        // If bot is not installed, focus on that as the immediate next step
+      // SCENARIO 1: No Discord entry at all - focus on step 1 only (creating server and sharing invite)
+      if (!project.Discord) {
+        return [
+          `**Let's set up your community on Discord!** \n`,
+          `**First Step: Create and Connect Your Discord Server**\n`,
+          `- Go to Discord and click the **+** button on the left sidebar`,
+          `- Choose **"Create a Server"** and follow the setup wizard`,
+          `- You can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
+          `- Once created, share your Discord invite link with me here`,
+          `- Just paste your Discord invite link (it will look like discord.gg/123abc)\n`,
+          `**Important:** Share your Discord invite link first, then we'll proceed to the next step.`,
+        ].join('\n');
+      }
+      // SCENARIO 2: Discord connected but bot not installed - focus on step 2
+      else if (!botInstalled) {
         return [
           `**Great progress on setting up your community!** \n`,
           `**Current Status:**\n`,
           `- Discord server connected ✅`,
           `- Verification bot installed ❌`,
           `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
-          `**Next Step: Install Verification Bot** ${getBotInstallationUrl()}\n`,
+          `**Next Step: Install Verification Bot**\n`,
           `- I've sent you a link to install our verification bot in a separate message`,
           `- This bot is required to track your community metrics automatically`,
           `- Without the bot, we can't verify your progress toward level-ups\n`,
           `After installing the bot, focus on inviting members to your server to reach at least 4 members.`,
           `Would you like suggestions for growing your community?`,
         ].join('\n');
-      } else {
-        // If bot is installed, focus on growing community
+      } 
+      // SCENARIO 3: Bot installed - focus on growing community
+      else {
         return [
           `**Great progress on setting up your community!** \n`,
           `**Current Status:**\n`,
