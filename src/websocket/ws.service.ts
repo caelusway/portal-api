@@ -967,38 +967,58 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
   switch (currentLevel) {
     case 1:
       return [
-        `**I'm excited to help you set up your research community!** \nLet me guide you through the process of creating your Discord server:\n`,
+        `**I'm excited to help you set up your research community!** \nLet me guide you through the process:\n`,
         `**1. Creating a Discord Server:**\n`,
         `- Go to Discord and click the **+** button on the left sidebar`,
         `- Choose **"Create a Server"** and follow the setup wizard`,
+        `- You can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
         `- Create channels for research discussions, paper sharing, and community updates\n`,
-        `**2. Adding Our Bot:**\n`,
+        `**2. Connecting Your Server:**\n`,
         `- Once your server is set up, share your Discord invite link with me`,
-        `- I'll help you add our **CoreAgent bot** to your server\n`,
+        `- Just paste your Discord invite link here (it will look like discord.gg/123abc)`,
+        `- I'll verify the server and then guide you through the next step\n`,
         `**3. Growing Your Community:**\n`,
-        `- Invite at least **4 members** to reach Level 3`,
+        `- After verification, you'll need to invite at least **4 members** to reach Level 3`,
         `- Reach out to colleagues, collaborators, and interested researchers\n`,
-        `Would you like help with any specific part of this process?`,
+        `Would you like help creating your Discord server?`,
       ].join('\n');
 
     case 2:
       const currentMembers = project.Discord?.memberCount || 0;
       const membersNeeded = 4 - currentMembers;
-      const botInstallationUrl = getBotInstallationUrl();
-      return [
-        `**Great progress on setting up your community!** \nHere's how to reach Level 3:\n`,
-        `**1. Grow to 4+ Members** *(you need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} members)*:\n`,
-        `- Share your Discord invite with researchers`,
-        `- Host virtual events or discussions`,
-        `- Invite members from related communities\n`,
-        `**2. Discord Setup:**\n`,
-        `- Create Discord server, you can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
-        `- Share Discord invite link with me here`,
-        `- Use this link to install the verification bot: ${botInstallationUrl}`,
-        `- The bot tracks member count, messages, and shared papers`,
-        `- Required to verify your progress and enable level-ups\n`,
-        `Would you like suggestions for growing your community or tracking your progress?`,
-      ].join('\n');
+      const botInstalled = project.Discord?.botAdded || false;
+      
+      if (!botInstalled) {
+        // If bot is not installed, focus on that as the immediate next step
+        return [
+          `**Great progress on setting up your community!** \n`,
+          `**Current Status:**\n`,
+          `- Discord server connected ✅`,
+          `- Verification bot installed ❌`,
+          `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
+          `**Next Step: Install Verification Bot**\n`,
+          `- I've sent you a link to install our verification bot in a separate message`,
+          `- This bot is required to track your community metrics automatically`,
+          `- Without the bot, we can't verify your progress toward level-ups\n`,
+          `After installing the bot, focus on inviting members to your server to reach at least 4 members.`,
+          `Would you like suggestions for growing your community?`,
+        ].join('\n');
+      } else {
+        // If bot is installed, focus on growing community
+        return [
+          `**Great progress on setting up your community!** \n`,
+          `**Current Status:**\n`,
+          `- Discord server connected ✅`, 
+          `- Verification bot installed ✅`,
+          `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
+          `**Focus on Growing Your Community:**\n`,
+          `- Invite researchers and collaborators to join your server`,
+          `- Share interesting scientific content to attract members`,
+          `- Host virtual events or discussions`,
+          `- Reach the milestone of 4 members to advance to Level 3\n`,
+          `Would you like suggestions for growing your community or tracking your progress?`,
+        ].join('\n');
+      }
 
     case 3:
       const members = project.Discord?.memberCount || 0;
@@ -1487,23 +1507,16 @@ async function handleDiscordSetup(
       true
     );
 
-    // Add a separate message for the agent to explain next steps
-    const agentMessage = {
+    // STEP 1: Send confirmation message about successful server connection
+    const serverConnectedMessage = {
       content: `## Discord Server Connected: "${serverDisplayName}" 🎉
 
 **Current Members:** ${memberCount} ${memberCount === 1 ? 'member' : 'members'}
 
-### Next Steps:
-1. **Add our DAO bot to your server** using this link: ${botInstallationUrl}
-2. This verification step ensures:
-   - You own the server
-   - We can track your Discord metrics accurately
-   - Your progress counts toward level advancement
-
-Once the bot is added, your Discord stats will be automatically tracked and will count towards your BioDAO level progress. The bot helps us monitor member count, messages, and scientific papers shared.`,
+Great job! I've successfully connected to your Discord server. Now we need to complete one more important step.`
     };
 
-    await saveChatMessage(chatSession, agentMessage, true, 'discord_setup_completed', true);
+    await saveChatMessage(chatSession, serverConnectedMessage, true, 'discord_server_connected', true);
 
     // Send success message with Discord info
     ws.send(
@@ -1531,11 +1544,40 @@ Once the bot is added, your Discord stats will be automatically tracked and will
     ws.send(
       JSON.stringify({
         type: 'message',
-        content: agentMessage.content,
+        content: serverConnectedMessage.content,
         isFromAgent: true,
-        action: 'discord_setup_completed',
+        action: 'discord_server_connected',
       })
     );
+
+    // STEP 2: Send a separate message about the bot installation
+    setTimeout(async () => {
+      const botInstallMessage = {
+        content: `## Next Step: Install Verification Bot
+
+To track your community's progress, please install our verification bot.
+
+**[Click here to install the BioDAO verification bot](${botInstallationUrl})**
+
+This verification bot helps:
+- Track member count automatically
+- Count messages and scientific papers shared
+- Verify your progress toward level advancement
+
+Once installed, your Discord stats will be automatically tracked for level progression.`
+      };
+
+      await saveChatMessage(chatSession, botInstallMessage, true, 'bot_install_prompt', true);
+
+      ws.send(
+        JSON.stringify({
+          type: 'message',
+          content: botInstallMessage.content,
+          isFromAgent: true,
+          action: 'bot_install_prompt',
+        })
+      );
+    }, 2000); // Send the bot installation prompt 2 seconds after the server connection confirmation
 
     // Trigger an AI interaction to provide contextual guidance
     try {
@@ -1550,7 +1592,7 @@ Once the bot is added, your Discord stats will be automatically tracked and will
         );
 
         // Get AI response specific to Discord setup
-        const setupPrompt = `The user has just connected their Discord server "${serverDisplayName}" with ${memberCount} members. Tell them what they need to do next to progress, focusing on adding the Discord bot and growing their community to at least 4 members.`;
+        const setupPrompt = `The user has just connected their Discord server "${serverDisplayName}" with ${memberCount} members. I've already sent them the verification bot installation instructions in a separate message. Focus on the next steps after they install the bot - growing their community to at least 4 members.`;
 
         // Process the message with AI
         const aiResponse = await processMessage(
