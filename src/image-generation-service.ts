@@ -1,8 +1,4 @@
 import OpenAI from 'openai';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -10,28 +6,33 @@ const openai = new OpenAI({
 });
 
 /**
- * Generates a unique filename for an image
+ * Converts an image URL to a base64 string
+ * @param imageUrl - URL of the image to convert
+ * @returns Base64 encoded string of the image
  */
-function generateUniqueFilename(): string {
-  return `${crypto.randomUUID()}.png`;
-}
-
-/**
- * Ensures the images directory exists
- */
-function ensureImageDirectory(): string {
-  const imageDir = path.join(process.cwd(), 'public', 'images');
-  if (!fs.existsSync(imageDir)) {
-    fs.mkdirSync(imageDir, { recursive: true });
+async function convertImageToBase64(imageUrl: string): Promise<string> {
+  try {
+    // Fetch the image
+    const imageResponse = await fetch(imageUrl);
+    // Convert to array buffer
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    // Create a buffer
+    const buffer = Buffer.from(arrayBuffer);
+    // Convert to base64
+    const base64String = buffer.toString('base64');
+    // Return the base64 data URI
+    return `data:image/png;base64,${base64String}`;
+  } catch (error) {
+    console.error('Error converting image to base64:', error);
+    throw error;
   }
-  return imageDir;
 }
 
 /**
  * Generates an image for an Idea NFT based on project description
  * @param projectId - The ID of the project
  * @param description - Project description to use as prompt basis
- * @returns The URL path to the generated image
+ * @returns The base64 encoded image data
  */
 export async function generateIdeaNFTImage(
   projectId: string,
@@ -70,24 +71,11 @@ export async function generateIdeaNFTImage(
       throw new Error('Failed to generate image: No URL returned');
     }
 
-    // Download and save the image
-    const imageResponse = await fetch(imageUrl);
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const imageDir = ensureImageDirectory();
-    const filename = generateUniqueFilename();
-    const imagePath = path.join(imageDir, filename);
-
-    fs.writeFileSync(imagePath, buffer);
-
-    // Return the relative path that can be used in URLs
-    const relativePath = `/images/${filename}`;
-
-    // Update the NFT record in the database - this step is removed as it's now handled
-    // during NFT creation in the handleNftMinting function
-    console.log(`Idea NFT image generated successfully at ${relativePath}`);
-    return relativePath;
+    // Convert the image to base64
+    const base64Image = await convertImageToBase64(imageUrl);
+    console.log(`Idea NFT image generated successfully and converted to base64`);
+    
+    return base64Image;
   } catch (error) {
     console.error('Error generating Idea NFT image:', error);
     throw error;
@@ -98,7 +86,7 @@ export async function generateIdeaNFTImage(
  * Generates an image for a Hypothesis/Vision NFT based on project vision
  * @param projectId - The ID of the project
  * @param vision - Project vision to use as prompt basis
- * @returns The URL path to the generated image
+ * @returns The base64 encoded image data
  */
 export async function generateVisionNFTImage(projectId: string, vision: string): Promise<string> {
   try {
@@ -134,24 +122,11 @@ export async function generateVisionNFTImage(projectId: string, vision: string):
       throw new Error('Failed to generate image: No URL returned');
     }
 
-    // Download and save the image
-    const imageResponse = await fetch(imageUrl);
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    const imageDir = ensureImageDirectory();
-    const filename = generateUniqueFilename();
-    const imagePath = path.join(imageDir, filename);
-
-    fs.writeFileSync(imagePath, buffer);
-
-    // Return the relative path that can be used in URLs
-    const relativePath = `/images/${filename}`;
-
-    // Update the NFT record in the database - this step is removed as it's now handled
-    // during NFT creation in the handleNftMinting function
-    console.log(`Vision NFT image generated successfully at ${relativePath}`);
-    return relativePath;
+    // Convert the image to base64
+    const base64Image = await convertImageToBase64(imageUrl);
+    console.log(`Vision NFT image generated successfully and converted to base64`);
+    
+    return base64Image;
   } catch (error) {
     console.error('Error generating Vision NFT image:', error);
     throw error;
