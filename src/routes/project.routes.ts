@@ -290,6 +290,8 @@ router.post('/', async (req: any, res: any) => {
       fullName,
       email,
       projectName,
+      projectLinks,
+      referralSource,
       projectDescription,
       projectVision,
       scientificReferences,
@@ -297,6 +299,7 @@ router.post('/', async (req: any, res: any) => {
       teamMembers,
       motivation,
       progress,
+
     } = req.body;
 
     // Require either privyId or wallet
@@ -329,6 +332,8 @@ router.post('/', async (req: any, res: any) => {
           teamMembers,
           motivation,
           progress,
+          projectLinks,
+          referralSource,
           // Only update these if provided
           ...(privyId && { privyId }),
           ...(wallet && { wallet }),
