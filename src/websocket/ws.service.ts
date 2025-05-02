@@ -18,6 +18,12 @@ import { getBotInstallationUrl } from '../utils/discord.utils';
 // Map to store active WebSocket connections by user ID
 const activeConnections: Record<string, WebSocket> = {};
 
+// Add a map to track servers that have already had bot installation notifications
+const botInstallNotificationSent = new Map<string, boolean>();
+
+// Add a map to track recent level-up notifications to prevent duplicates
+const recentLevelUpsByUser = new Map<string, Map<number, number>>();
+
 /**
  * Gets an existing chat session or creates a new one for a user
  * @param userId User ID
@@ -1873,6 +1879,12 @@ async function checkLevelUpConditions(
       // Define the new level
       const newLevel = 3;
 
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
+
       // Update to level 3
       await prisma.project.update({
         where: { id: userId },
@@ -1924,6 +1936,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
         })
       );
 
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
+
       // Send email notification
       if (project.email) {
         try {
@@ -1933,9 +1948,10 @@ I'll help you track these metrics and provide strategies to achieve them.`;
         }
       }
     }
-    // Level 3 to Level 4: Need 10+ members, 25+ papers, 100+ messages, 70+ quality score
+    // Level 3 to Level 4: Need 10+ members, 25+ papers, 100+ messages
     else if (
       currentLevel === 3 &&
+      discordStats &&
       discordStats.verified &&
       discordStats.memberCount >= 5 &&
       discordStats.papersShared >= 5 &&
@@ -1943,6 +1959,12 @@ I'll help you track these metrics and provide strategies to achieve them.`;
     ) {
       // Define the new level
       const newLevel = 4;
+
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
 
       // Update to level 4
       await prisma.project.update({
@@ -1994,6 +2016,9 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
           action: 'LEVEL_UP',
         })
       );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
 
       // Send email notifications
       if (project.email) {
@@ -2059,6 +2084,12 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         // Check level 2 to 3 conditions (Discord created with members)
         const discordInfo = await DiscordService.getByProjectId(project.id);
         if (discordInfo && discordInfo.verified && discordInfo.memberCount >= 4) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 3)) {
+            console.log(`Skipping duplicate level 3 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
           newLevel = 3;
           shouldLevelUp = true;
           levelUpMessage = `🎉 Congratulations! You've progressed to Level 3: Community Growth.\n\nYour next goals are:\n- Reach 10+ Discord members\n- Share 25+ scientific papers\n- Have 100+ messages in your Discord`;
@@ -2085,6 +2116,12 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           discordStats.papersShared >= 5 &&
           discordStats.messagesCount >= 50
         ) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 4)) {
+            console.log(`Skipping duplicate level 4 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
           newLevel = 4;
           shouldLevelUp = true;
           levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nThis is the final milestone in your BioDAO onboarding journey. The Bio team will reach out to you via email soon to schedule a call to discuss your next steps.`;
@@ -2158,6 +2195,9 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           action: 'level_up',
         })
       );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(project.id, newLevel);
 
       // Send level up email notification
       try {
@@ -2256,6 +2296,9 @@ async function handleBotInstalled(
         memberCount: serverDetails.memberCount || discordRecord.memberCount,
       },
     });
+
+    // Mark this server as having received a bot installation notification
+    botInstallNotificationSent.set(serverDetails.guildId, true);
 
     // Create the bot added message
     const botAddedMessage = {
@@ -2382,8 +2425,15 @@ async function handleGuildCreate(
         // Find the user's WebSocket connection
         const ws = activeConnections[project.id];
 
-        const botAddedMessage = {
-          content: `## Discord Bot Successfully Added! 🎉
+        // Check if we've already sent a bot installation notification for this server
+        const alreadySentNotification = botInstallNotificationSent.get(guildId) || false;
+
+        // Only send the notification if we haven't already sent one
+        if (!alreadySentNotification && ws && ws.readyState === WebSocket.OPEN) {
+          console.log(`Sending bot installation notification to user ${project.id}`);
+
+          const botAddedMessage = {
+            content: `## Discord Bot Successfully Added! 🎉
 
 **Great news!** The verification bot has been successfully added to your Discord server "${guildName || 'Your Discord Server'}".
 
@@ -2399,13 +2449,9 @@ async function handleGuildCreate(
 - ✅ All metrics will update in **real-time** towards your level progression
 
 ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify for Level 3!' : `### Next Steps:\nYou need **${4 - memberCount} more ${4 - memberCount === 1 ? 'member' : 'members'}** to reach Level 3.\n\nKeep growing your community by inviting researchers and collaborators to join your server!`}`,
-        };
+          };
 
-        await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
-
-        // If the user has an active WebSocket connection, send them notifications
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          console.log(`Sending bot installation notification to user ${project.id}`);
+          await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
           // Send the text message
           ws.send(
@@ -2434,6 +2480,15 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
             })
           );
           
+          // Mark this server as having received a notification
+          botInstallNotificationSent.set(guildId, true);
+        }
+        else if (alreadySentNotification) {
+          console.log(`Skipping duplicate bot installation notification for server ${guildId}, already sent`);
+        }
+        
+        // Even if we don't send a notification, still check for level up
+        if (ws && ws.readyState === WebSocket.OPEN) {
           // Check for level up using the standardized mechanism
           await checkLevelUpConditions(
             project.id,
@@ -2451,7 +2506,7 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
           );
         } else {
           console.log(
-            `User ${project.id} does not have an active WebSocket connection. Message saved to chat history only.`
+            `User ${project.id} does not have an active WebSocket connection. Cannot check for level up.`
           );
         }
       }
@@ -2481,6 +2536,12 @@ async function checkAndUpdateUserLevel(project: any) {
     project.Discord.memberCount >= 4
   ) {
     const newLevel = 3;
+    
+    // Check if we've recently sent this level-up notification
+    if (wasLevelUpRecentlySent(project.id, newLevel)) {
+      console.log(`Skipping duplicate level ${newLevel} notification for user ${project.id} (sent recently)`);
+      return;
+    }
     
     await prisma.project.update({
       where: { id: project.id },
@@ -2534,6 +2595,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
       );
     }
 
+    // Record that we've sent this level-up notification
+    recordLevelUpSent(project.id, newLevel);
+
     // Send level up email
     if (project.email) {
       try {
@@ -2553,6 +2617,12 @@ I'll help you track these metrics and provide strategies to achieve them.`;
     project.Discord.messagesCount >= 50
   ) {
     const newLevel = 4;
+    
+    // Check if we've recently sent this level-up notification
+    if (wasLevelUpRecentlySent(project.id, newLevel)) {
+      console.log(`Skipping duplicate level ${newLevel} notification for user ${project.id} (sent recently)`);
+      return;
+    }
     
     await prisma.project.update({
       where: { id: project.id },
@@ -2606,6 +2676,9 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
       );
     }
 
+    // Record that we've sent this level-up notification
+    recordLevelUpSent(project.id, newLevel);
+
     // Send email notifications
     if (project.email) {
       try {
@@ -2630,6 +2703,32 @@ function normalizeMarkdown(content: string): string {
   normalized = normalized.replace(/(\* .+)(\n)(?!\n|\* )/g, '$1\n');
   normalized = normalized.replace(/^(\s*\n)+|((\n\s*)+)$/g, '');
   return normalized;
+}
+
+// Function to check if a level-up notification was recently sent
+function wasLevelUpRecentlySent(userId: string, newLevel: number): boolean {
+  const now = Date.now();
+  const userLevelUps = recentLevelUpsByUser.get(userId);
+  
+  if (!userLevelUps) return false;
+  
+  const lastSentTimestamp = userLevelUps.get(newLevel);
+  if (!lastSentTimestamp) return false;
+  
+  // Consider a level-up notification as "recent" if it was sent in the last 60 seconds
+  return (now - lastSentTimestamp) < 30000; // 60 seconds
+}
+
+// Function to record that a level-up notification was sent
+function recordLevelUpSent(userId: string, newLevel: number): void {
+  let userLevelUps = recentLevelUpsByUser.get(userId);
+  
+  if (!userLevelUps) {
+    userLevelUps = new Map<number, number>();
+    recentLevelUpsByUser.set(userId, userLevelUps);
+  }
+  
+  userLevelUps.set(newLevel, Date.now());
 }
 
 export {
