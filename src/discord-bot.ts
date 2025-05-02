@@ -19,12 +19,7 @@ import {
 } from './paper-detection';
 import prisma from './services/db.service';
 import { WebSocketServer, WebSocket as WS } from 'ws';
-import { 
-  checkAndPerformLevelUp, 
-  checkAndUpdateUserLevel, 
-  handleBotInstalled,
-  setServerBotNotificationSent 
-} from './websocket/ws.service';
+import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
 // Fix for missing types for pdf-parse
@@ -295,10 +290,6 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
 
   // Initialize stats tracking for this guild
   initializeGuildStats(guild);
-
-  // Mark this server as already having received a notification
-  // This prevents duplicate "Bot Added" messages
-  setServerBotNotificationSent(guild.id, true);
 
   try {
     // Import dynamically to avoid circular dependencies
@@ -1127,10 +1118,6 @@ export function initDiscordBot() {
 
       // Initialize stats for this guild
       initializeGuildStats(guild);
-
-      // Mark this server as already having received a notification
-      // This prevents duplicate "Bot Added" messages
-      setServerBotNotificationSent(guild.id, true);
 
       try {
         // Import dynamically to avoid circular dependencies
