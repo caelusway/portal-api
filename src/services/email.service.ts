@@ -10,7 +10,7 @@ const mailgun = new Mailgun(FormData);
 const mg = mailgun.client({
   username: 'api',
   key: process.env.MAILGUN_API_KEY || '',
-  url: process.env.MAILGUN_REGION === 'eu' ? 'https://api.eu.mailgun.net' : undefined,
+  url: process.env.MAILGUN_REGION === 'us' ? 'https://api.mailgun.net' : undefined,
 });
 
 const MAILGUN_DOMAIN =

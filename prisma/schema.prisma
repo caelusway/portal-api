@@ -33,68 +33,41 @@ model BioUser {
 
 // New Model for the shared Project/DAO/Team
 model Project {
-  id                 String    @id @default(uuid())
-  name               String?
-  description        String?
-  vision             String?
-  level              Int       @default(1)
-  scientificReferences String? // Consider Json type if structured data needed
-  credentialLinks    String? // Consider Json type if structured data needed
-  teamDescription    String?
-  teamMembers        String?
-  motivation         String?
-  progress           String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  // Relationships
-  members      ProjectMember[]
-  discord      Discord?        // A project can have one Discord config
-  nfts         NFT[]           // NFTs belong to the project
-  chatSessions ChatSession[]   // Chat sessions belong to the project
-  invites      ProjectInvite[] // Invites belong to the project
+  id                   String        @id @default(uuid())
+  wallet               String        @unique
+  privyId              String?       @unique
+  level                Int           @default(1)
+  fullName             String?
+  email                String?
+  projectName          String?
+  projectDescription   String?
+  projectVision        String?
+  scientificReferences String?
+  credentialLinks      String?
+  teamMembers          String?
+  motivation           String?
+  progress             String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  referralCode         String?       @unique
+  referredById         String?
+  referralSource       String?
+  projectLinks         String?
+  ChatSessions         ChatSession[]
+  Discord              Discord?
+  NFTs                 NFT[]
+  referredBy           Project?      @relation("Referrals", fields: [referredById], references: [id])
+  referrals            Project[]     @relation("Referrals")
 }
 
-// Linking table for User <-> Project relationship with roles
-model ProjectMember {
-  id        String   @id @default(uuid())
-  role      String   // e.g., "founder", "member", "admin"
-  joinedAt  DateTime @default(now())
-
-  bioUserId String
-  bioUser   BioUser  @relation(fields: [bioUserId], references: [id], onDelete: Cascade) // Link to BioUser
-
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade) // Link to Project
-
-  @@unique([bioUserId, projectId]) // User can only be a member of a project once
-}
-
-// Model for tracking co-founder/member invites
-model ProjectInvite {
-  id            String    @id @default(uuid())
-  projectId     String
-  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  inviterUserId String
-  inviter       BioUser   @relation("InvitesSent", fields: [inviterUserId], references: [id])
-  inviteeEmail  String    // Email the invite was sent to
-  token         String    @unique // Secure, single-use token
-  status        String    @default("pending") // "pending", "accepted", "expired", "revoked"
-  expiresAt     DateTime  // Set an expiry time for the token
-  createdAt     DateTime  @default(now())
-}
-
-// Updated NFT Model
 model NFT {
   id              String   @id @default(uuid())
-  type            String // e.g., "idea", "vision"
+  type            String
   mintedAt        DateTime @default(now())
+  projectId       String
   transactionHash String?
   imageUrl        String?
-
-  // Relation to the new Project model
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project         Project  @relation(fields: [projectId], references: [id])
 }
 
 // Updated Discord Model
@@ -105,37 +78,30 @@ model Discord {
   memberCount       Int?
   papersShared      Int       @default(0)
   messagesCount     Int       @default(0)
-  qualityScore      Int       @default(50)
-  serverName        String?
-  serverIcon        String?
+  qualityScore      Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  inviteLink        String
   botAdded          Boolean   @default(false)
   botAddedAt        DateTime?
-  verified          Boolean   @default(false) // Requires bot to be added AND potentially a check
-  verificationToken String?   @unique // Token used in bot install URL state param
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relation to the new Project model (still unique per project)
-  projectId String  @unique
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  verificationToken String?
+  verified          Boolean   @default(false)
+  serverIcon        String?
+  serverName        String?
+  projectId         String    @unique
+  project           Project   @relation(fields: [projectId], references: [id])
 }
 
 // Updated ChatSession Model
 model ChatSession {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relation to the new Project model
+  id        String        @id @default(uuid())
+  startedAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
   projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // Relation to Messages
-  messages ChatMessage[]
+  messages  ChatMessage[]
+  project   Project       @relation(fields: [projectId], references: [id])
 }
 
-// Updated ChatMessage Model
 model ChatMessage {
   id            String   @id @default(uuid())
   sessionId     String

@@ -284,14 +284,19 @@ router.post('/', async (req: any, res: any) => {
     const {
       privyId,
       wallet,
-      name,
-      description,
-      vision,
+      fullName,
+      email,
+      projectName,
+      projectLinks,
+      referralSource,
+      projectDescription,
+      projectVision,
       scientificReferences,
       credentialLinks,
       teamDescription,
       motivation,
       progress,
+
     } = req.body;
 
     // Require either privyId or wallet
@@ -322,6 +327,8 @@ router.post('/', async (req: any, res: any) => {
           teamDescription,
           motivation,
           progress,
+          projectLinks,
+          referralSource,
           // Only update these if provided
           ...(privyId && { privyId }),
           ...(wallet && { wallet }),
