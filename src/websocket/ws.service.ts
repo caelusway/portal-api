@@ -1810,6 +1810,7 @@ async function checkLevelUpConditions(
 
     // Skip if user is already at max level
     if (project.level >= 4) return;
+    
 
     // Level 2 to Level 3: Need 4+ Discord members and verified status
     if (currentLevel === 2 && discordStats.verified && discordStats.memberCount >= 4) {
@@ -2086,13 +2087,19 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         })
       );
 
+      // Get or create chat session for this user
+      const sessionId = await ChatSessionService.getOrCreateForUser(project.id);
+      
+      // Save the level up message to chat history
+      await ChatMessageService.saveMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
+
       // Also send a message about leveling up
       ws.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
           isFromAgent: true,
-          action: 'LEVEL_UP',
+          action: 'level_up',
         })
       );
 
