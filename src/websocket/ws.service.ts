@@ -18,6 +18,12 @@ import { getBotInstallationUrl } from '../utils/discord.utils';
 // Map to store active WebSocket connections by user ID
 const activeConnections: Record<string, WebSocket> = {};
 
+// Add a map to track servers that have already had bot installation notifications
+const botInstallNotificationSent = new Map<string, boolean>();
+
+// Add a map to track recent level-up notifications to prevent duplicates
+const recentLevelUpsByUser = new Map<string, Map<number, number>>();
+
 /**
  * Gets an existing chat session or creates a new one for a user
  * @param userId User ID
@@ -320,6 +326,7 @@ async function checkForPendingBotNotifications(ws: WebSocket, userId: string): P
 Your Discord server is now fully verified and stats are being tracked automatically.`,
           };
 
+          /*
           ws.send(
             JSON.stringify({
               type: 'message',
@@ -346,6 +353,7 @@ Your Discord server is now fully verified and stats are being tracked automatica
               },
             })
           );
+          */
         }
       }
     } else {
@@ -967,38 +975,72 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
   switch (currentLevel) {
     case 1:
       return [
-        `**I'm excited to help you set up your research community!** \nLet me guide you through the process of creating your Discord server:\n`,
+        `**I'm excited to help you set up your research community!** \nLet me guide you through the process:\n`,
         `**1. Creating a Discord Server:**\n`,
         `- Go to Discord and click the **+** button on the left sidebar`,
         `- Choose **"Create a Server"** and follow the setup wizard`,
+        `- You can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
         `- Create channels for research discussions, paper sharing, and community updates\n`,
-        `**2. Adding Our Bot:**\n`,
+        `**2. Connecting Your Server:**\n`,
         `- Once your server is set up, share your Discord invite link with me`,
-        `- I'll help you add our **CoreAgent bot** to your server\n`,
+        `- Just paste your Discord invite link here (it will look like discord.gg/123abc)`,
+        `- I'll verify the server and then guide you through the next step\n`,
         `**3. Growing Your Community:**\n`,
-        `- Invite at least **4 members** to reach Level 3`,
+        `- After verification, you'll need to invite at least **4 members** to reach Level 3`,
         `- Reach out to colleagues, collaborators, and interested researchers\n`,
-        `Would you like help with any specific part of this process?`,
+        `Would you like help creating your Discord server?`,
       ].join('\n');
 
     case 2:
       const currentMembers = project.Discord?.memberCount || 0;
       const membersNeeded = 4 - currentMembers;
-      const botInstallationUrl = getBotInstallationUrl();
-      return [
-        `**Great progress on setting up your community!** \nHere's how to reach Level 3:\n`,
-        `**1. Grow to 4+ Members** *(you need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} members)*:\n`,
-        `- Share your Discord invite with researchers`,
-        `- Host virtual events or discussions`,
-        `- Invite members from related communities\n`,
-        `**2. Discord Setup:**\n`,
-        `- Create Discord server, you can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
-        `- Share Discord invite link with me here`,
-        `- Use this link to install the verification bot: ${botInstallationUrl}`,
-        `- The bot tracks member count, messages, and shared papers`,
-        `- Required to verify your progress and enable level-ups\n`,
-        `Would you like suggestions for growing your community or tracking your progress?`,
-      ].join('\n');
+      const botInstalled = project.Discord?.botAdded || false;
+      
+      // SCENARIO 1: No Discord entry at all - focus on step 1 only (creating server and sharing invite)
+      if (!project.Discord) {
+        return [
+          `**Let's set up your community on Discord!** \n`,
+          `**First Step: Create and Connect Your Discord Server**\n`,
+          `- Go to Discord and click the **+** button on the left sidebar`,
+          `- Choose **"Create a Server"** and follow the setup wizard`,
+          `- You can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
+          `- Once created, share your Discord invite link with me here`,
+          `- Just paste your Discord invite link (it will look like discord.gg/123abc)\n`,
+          `**Important:** Share your Discord invite link first, then we'll proceed to the next step.`,
+        ].join('\n');
+      }
+      // SCENARIO 2: Discord connected but bot not installed - focus on step 2
+      else if (!botInstalled) {
+        return [
+          `**Great progress on setting up your community!** \n`,
+          `**Current Status:**\n`,
+          `- Discord server connected ✅`,
+          `- Verification bot installed ❌`,
+          `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
+          `**Next Step: Install Verification Bot**\n`,
+          `- I've sent you a link to install our verification bot in a separate message`,
+          `- This bot is required to track your community metrics automatically`,
+          `- Without the bot, we can't verify your progress toward level-ups\n`,
+          `After installing the bot, focus on inviting members to your server to reach at least 4 members.`,
+          `Would you like suggestions for growing your community?`,
+        ].join('\n');
+      } 
+      // SCENARIO 3: Bot installed - focus on growing community
+      else {
+        return [
+          `**Great progress on setting up your community!** \n`,
+          `**Current Status:**\n`,
+          `- Discord server connected ✅`, 
+          `- Verification bot installed ✅`,
+          `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
+          `**Focus on Growing Your Community:**\n`,
+          `- Invite researchers and collaborators to join your server`,
+          `- Share interesting scientific content to attract members`,
+          `- Host virtual events or discussions`,
+          `- Reach the milestone of 4 members to advance to Level 3\n`,
+          `Would you like suggestions for growing your community or tracking your progress?`,
+        ].join('\n');
+      }
 
     case 3:
       const members = project.Discord?.memberCount || 0;
@@ -1488,23 +1530,16 @@ async function handleDiscordSetup(
       true
     );
 
-    // Add a separate message for the agent to explain next steps
-    const agentMessage = {
+    // STEP 1: Send confirmation message about successful server connection
+    const serverConnectedMessage = {
       content: `## Discord Server Connected: "${serverDisplayName}" 🎉
 
 **Current Members:** ${memberCount} ${memberCount === 1 ? 'member' : 'members'}
 
-### Next Steps:
-1. **Add our DAO bot to your server** using this link: ${botInstallationUrl}
-2. This verification step ensures:
-   - You own the server
-   - We can track your Discord metrics accurately
-   - Your progress counts toward level advancement
-
-Once the bot is added, your Discord stats will be automatically tracked and will count towards your BioDAO level progress. The bot helps us monitor member count, messages, and scientific papers shared.`,
+Great job! I've successfully connected to your Discord server. Now we need to complete one more important step.`
     };
 
-    await saveChatMessage(chatSession, agentMessage, true, 'discord_setup_completed', true);
+    await saveChatMessage(chatSession, serverConnectedMessage, true, 'discord_server_connected', true);
 
     // Send success message with Discord info
     ws.send(
@@ -1532,11 +1567,40 @@ Once the bot is added, your Discord stats will be automatically tracked and will
     ws.send(
       JSON.stringify({
         type: 'message',
-        content: agentMessage.content,
+        content: serverConnectedMessage.content,
         isFromAgent: true,
-        action: 'discord_setup_completed',
+        action: 'discord_server_connected',
       })
     );
+
+    // STEP 2: Send a separate message about the bot installation
+    setTimeout(async () => {
+      const botInstallMessage = {
+        content: `## Next Step: Install Verification Bot
+
+To track your community's progress, please install our verification bot.
+
+**[Click here to install the BioDAO verification bot](${botInstallationUrl})**
+
+This verification bot helps:
+- Track member count automatically
+- Count messages and scientific papers shared
+- Verify your progress toward level advancement
+
+Once installed, your Discord stats will be automatically tracked for level progression.`
+      };
+
+      await saveChatMessage(chatSession, botInstallMessage, true, 'bot_install_prompt', true);
+
+      ws.send(
+        JSON.stringify({
+          type: 'message',
+          content: botInstallMessage.content,
+          isFromAgent: true,
+          action: 'bot_install_prompt',
+        })
+      );
+    }, 2000); // Send the bot installation prompt 2 seconds after the server connection confirmation
 
     // Trigger an AI interaction to provide contextual guidance
     try {
@@ -1551,7 +1615,7 @@ Once the bot is added, your Discord stats will be automatically tracked and will
         );
 
         // Get AI response specific to Discord setup
-        const setupPrompt = `The user has just connected their Discord server "${serverDisplayName}" with ${memberCount} members. Tell them what they need to do next to progress, focusing on adding the Discord bot and growing their community to at least 4 members.`;
+        const setupPrompt = `The user has just connected their Discord server "${serverDisplayName}" with ${memberCount} members. I've already sent them the verification bot installation instructions in a separate message. Focus on the next steps after they install the bot - growing their community to at least 4 members.`;
 
         // Process the message with AI
         const aiResponse = await processMessage(
@@ -1812,11 +1876,18 @@ async function checkLevelUpConditions(
 
     // Skip if user is already at max level
     if (project.level >= 4) return;
+    
 
     // Level 2 to Level 3: Need 4+ Discord members and verified status
-    if (currentLevel === 2 && discordStats.verified && discordStats.memberCount >= 4) {
+    if (currentLevel === 2 && discordStats && discordStats.verified && discordStats.memberCount >= 4) {
       // Define the new level
       const newLevel = 3;
+
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
 
       // Update to level 3
       await prisma.project.update({
@@ -1869,6 +1940,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
         })
       );
 
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
+
       // Send email notification
       if (project.members[0].bioUser.email) {
         try {
@@ -1878,9 +1952,10 @@ I'll help you track these metrics and provide strategies to achieve them.`;
         }
       }
     }
-    // Level 3 to Level 4: Need 10+ members, 25+ papers, 100+ messages, 70+ quality score
+    // Level 3 to Level 4: Need 10+ members, 25+ papers, 100+ messages
     else if (
       currentLevel === 3 &&
+      discordStats &&
       discordStats.verified &&
       discordStats.memberCount >= 5 &&
       discordStats.papersShared >= 5 &&
@@ -1888,6 +1963,12 @@ I'll help you track these metrics and provide strategies to achieve them.`;
     ) {
       // Define the new level
       const newLevel = 4;
+
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
 
       // Update to level 4
       await prisma.project.update({
@@ -1939,6 +2020,9 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
           action: 'LEVEL_UP',
         })
       );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
 
       // Send email notifications
       if (project.members[0].bioUser.email) {
@@ -2003,7 +2087,13 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
       case 2:
         // Check level 2 to 3 conditions (Discord created with members)
         const discordInfo = await DiscordService.getByProjectId(project.id);
-        if (discordInfo && discordInfo.verified && discordInfo.memberCount && discordInfo.memberCount >= 4) {
+        if (discordInfo && discordInfo.verified && discordInfo.memberCount >= 4) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 3)) {
+            console.log(`Skipping duplicate level 3 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
           newLevel = 3;
           shouldLevelUp = true;
           levelUpMessage = `🎉 Congratulations! You've progressed to Level 3: Community Growth.\n\nYour next goals are:\n- Reach 10+ Discord members\n- Share 25+ scientific papers\n- Have 100+ messages in your Discord`;
@@ -2031,6 +2121,12 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           discordStats.papersShared >= 5 &&
           discordStats.messagesCount >= 50
         ) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 4)) {
+            console.log(`Skipping duplicate level 4 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
           newLevel = 4;
           shouldLevelUp = true;
           levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nThis is the final milestone in your BioDAO onboarding journey. The Bio team will reach out to you via email soon to schedule a call to discuss your next steps.`;
@@ -2089,15 +2185,24 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         })
       );
 
+      // Get or create chat session for this user
+      const sessionId = await ChatSessionService.getOrCreateForUser(project.id);
+      
+      // Save the level up message to chat history
+      await ChatMessageService.saveMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
+
       // Also send a message about leveling up
       ws.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
           isFromAgent: true,
-          action: 'LEVEL_UP',
+          action: 'level_up',
         })
       );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(project.id, newLevel);
 
       // Send level up email notification
       try {
@@ -2144,7 +2249,7 @@ async function sendSandboxEmail(project: any) {
 }
 
 /**
- * Handle notification when a bot is successfully added to a Discord server
+ * Handle notification when a bot is successfully installed to a Discord server
  * @param ws WebSocket connection
  * @param userId User ID
  * @param serverDetails Discord server details
@@ -2198,6 +2303,9 @@ async function handleBotInstalled(
       },
     });
 
+    // Mark this server as having received a bot installation notification
+    botInstallNotificationSent.set(serverDetails.guildId, true);
+
     // Create the bot added message
     const botAddedMessage = {
       content: `## Discord Bot Successfully Added! 🎉
@@ -2219,9 +2327,10 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
     };
 
     // Save the message to the chat history
-    await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
+    //await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
     // Send the notification over WebSocket
+    /*
     ws.send(
       JSON.stringify({
         type: 'message',
@@ -2245,58 +2354,25 @@ ${serverDetails.memberCount >= 4 ? '**Congratulations!** You have enough members
         },
       })
     );
+    */
 
-    // Check for level up if applicable
-    if (project && project.level === 2 && serverDetails.memberCount >= 4) {
-      const newLevel = 3; // Define variable instead of hardcoding
-      await prisma.project.update({
-        where: { id: userId },
-        data: { level: newLevel },
-      });
-
-      const levelUpMessage = {
-        content: `## Level ${newLevel} Unlocked! 🚀
-
-**Congratulations!** Your BioDAO community now has **${serverDetails.memberCount} members**. You've advanced to **Level ${newLevel}!**
-
-### New Level Requirements:
-- Increase to **10 community members** (currently: ${serverDetails.memberCount})
-- Share **25 scientific papers** in your Discord
-- Reach **100 quality messages** in your server
-
-Continue growing your community and sharing valuable scientific content to progress to Level 4!`,
-      };
-
-      await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
-
-      ws.send(
-        JSON.stringify({
-          type: 'level_up',
-          level: newLevel,
-          message: levelUpMessage.content,
-          nextLevelRequirements: [
-            'Grow your community to 10+ Discord members',
-            'Share at least 25 scientific papers in your server',
-            'Reach 100+ quality messages in your community',
-          ],
-        })
+    // After bot is installed, always check level-up conditions using the proper mechanism
+    if (project) {
+      // Pass in the updated Discord stats for immediate level-up check
+      await checkLevelUpConditions(
+        userId, 
+        project.level, 
+        {
+          verified: true,
+          memberCount: serverDetails.memberCount,
+          papersShared: 0,
+          messagesCount: 0,
+          qualityScore: 0,
+          botAdded: true
+        },
+        ws
       );
-
-      // Send level up email notification
-      if (project.members[0].bioUser.email) {
-        try {
-          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
-          console.log(
-            `Level up email sent to ${project.members[0].bioUser.email} for level ${newLevel} (triggered by bot installation)`
-          );
-        } catch (emailError) {
-          console.error(`Error sending level up email for project ${userId}:`, emailError);
-        }
-      }
     }
-
-    // Check and perform level up
-    await checkAndPerformLevelUp(project, ws);
 
     console.log(
       `Discord bot installation processed for user ${userId}, server: ${serverDetails.guildName || serverDetails.guildId}`
@@ -2364,8 +2440,15 @@ async function handleGuildCreate(
         // Find the user's WebSocket connection
         const ws = activeConnections[project.id];
 
-        const botAddedMessage = {
-          content: `## Discord Bot Successfully Added! 🎉
+        // Check if we've already sent a bot installation notification for this server
+        const alreadySentNotification = botInstallNotificationSent.get(guildId) || false;
+
+        // Only send the notification if we haven't already sent one
+        if (!alreadySentNotification && ws && ws.readyState === WebSocket.OPEN) {
+          console.log(`Sending bot installation notification to user ${project.id}`);
+
+          const botAddedMessage = {
+            content: `## Discord Bot Successfully Added! 🎉
 
 **Great news!** The verification bot has been successfully added to your Discord server "${guildName || 'Your Discord Server'}".
 
@@ -2381,14 +2464,9 @@ async function handleGuildCreate(
 - ✅ All metrics will update in **real-time** towards your level progression
 
 ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify for Level 3!' : `### Next Steps:\nYou need **${4 - memberCount} more ${4 - memberCount === 1 ? 'member' : 'members'}** to reach Level 3.\n\nKeep growing your community by inviting researchers and collaborators to join your server!`}`,
-        };
+          };
 
-        console.log(`[WS Service - handleGuildCreate] Saving bot added message to session ID: ${sessionId}`);
-        await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
-
-        // If the user has an active WebSocket connection, send them notifications
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          console.log(`[WS Service - handleGuildCreate] Sending bot installation notifications via WebSocket to user ${project.id}`);
+          await saveChatMessage(sessionId, botAddedMessage, true, 'BOT_ADDED', true);
 
           // Send the text message
           ws.send(
@@ -2416,17 +2494,36 @@ ${memberCount >= 4 ? '**Congratulations!** You have enough members to qualify fo
               },
             })
           );
+          
+          // Mark this server as having received a notification
+          botInstallNotificationSent.set(guildId, true);
+        }
+        else if (alreadySentNotification) {
+          console.log(`Skipping duplicate bot installation notification for server ${guildId}, already sent`);
+        }
+        
+        // Even if we don't send a notification, still check for level up
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          // Check for level up using the standardized mechanism
+          await checkLevelUpConditions(
+            project.id,
+            project.level,
+            {
+              verified: true,
+              memberCount: memberCount,
+              papersShared: 0,
+              messagesCount: 0,
+              qualityScore: 0,
+              botAdded: true,
+              serverId: guildId
+            },
+            ws
+          );
         } else {
           console.log(
-            `[WS Service - handleGuildCreate] User ${project.id} does not have an active WebSocket connection. Message saved to chat history only.`
+            `User ${project.id} does not have an active WebSocket connection. Cannot check for level up.`
           );
         }
-
-        // Check and perform level up
-        console.log(`[WS Service - handleGuildCreate] Checking level up for project ${project.id}`);
-        await checkAndPerformLevelUp(project, ws); // Pass the fetched project with relations
-      } else {
-        console.warn(`[WS Service - handleGuildCreate] Project not found for projectId: ${discordRecord.projectId} after updating Discord record.`);
       }
 
       console.log(
@@ -2452,34 +2549,56 @@ async function checkAndUpdateUserLevel(project: any) {
     project.Discord.botAdded &&
     project.Discord.memberCount >= 4
   ) {
+    const newLevel = 3;
+    
+    // Check if we've recently sent this level-up notification
+    if (wasLevelUpRecentlySent(project.id, newLevel)) {
+      console.log(`Skipping duplicate level ${newLevel} notification for user ${project.id} (sent recently)`);
+      return;
+    }
+    
     await prisma.project.update({
       where: { id: project.id },
-      data: { level: 3 },
+      data: { level: newLevel },
     });
 
-    // Notify user about level up
+    // Get session for chat history
     const sessionId = await getOrCreateChatSession(project.id);
-    const levelUpMessage =
-      "Congratulations! Your BioDAO community now has 4 members. You've advanced to Level 3!";
+    
+    // Create a properly formatted level-up message that matches other level-up notifications
+    const levelUpMessage = `## Level ${newLevel} Unlocked! 🎉
 
+**Congratulations!** Your BioDAO community now has **${project.Discord.memberCount} members**, which means you've advanced to **Level ${newLevel}!**
+
+To advance to Level 4, you'll need to:
+1. **Grow your community to 10+ members**
+2. **Share 25+ scientific papers** in your Discord
+3. **Reach 100+ quality messages**
+
+I'll help you track these metrics and provide strategies to achieve them.`;
+
+    // Save level-up message to chat
     await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
 
     // Send notification if user is connected
     const userConnection = activeConnections[project.id];
     if (userConnection) {
+      // Send level-up message as a regular chat message
       userConnection.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
-          action: 'LEVEL_UP',
           isFromAgent: true,
+          action: 'LEVEL_UP',
         })
       );
+      
+      // Also send dedicated level-up event with proper metadata
       userConnection.send(
         JSON.stringify({
           type: 'level_up',
           previousLevel: 2,
-          newLevel: 3,
+          newLevel: newLevel,
           message: levelUpMessage,
           nextLevelRequirements: [
             'Grow your community to 10+ Discord members',
@@ -2490,8 +2609,17 @@ async function checkAndUpdateUserLevel(project: any) {
       );
     }
 
+    // Record that we've sent this level-up notification
+    recordLevelUpSent(project.id, newLevel);
+
     // Send level up email
-    await sendLevelUpEmail(project.email, 3);
+    if (project.email) {
+      try {
+        await sendLevelUpEmail(project.email, newLevel);
+      } catch (error) {
+        console.error(`Error sending level up email to ${project.email}:`, error);
+      }
+    }
   }
 
   // Level 4 requires 10 Discord members, 25 papers, 100 messages
@@ -2502,34 +2630,56 @@ async function checkAndUpdateUserLevel(project: any) {
     project.Discord.papersShared >= 5 &&
     project.Discord.messagesCount >= 50
   ) {
+    const newLevel = 4;
+    
+    // Check if we've recently sent this level-up notification
+    if (wasLevelUpRecentlySent(project.id, newLevel)) {
+      console.log(`Skipping duplicate level ${newLevel} notification for user ${project.id} (sent recently)`);
+      return;
+    }
+    
     await prisma.project.update({
       where: { id: project.id },
-      data: { level: 4 },
+      data: { level: newLevel },
     });
 
-    // Notify user about level up
+    // Get session for chat history
     const sessionId = await getOrCreateChatSession(project.id);
-    const levelUpMessage =
-      "Congratulations! Your BioDAO community has reached critical mass with 10+ members, 25+ papers shared, and 100+ messages. You've advanced to Level 4! You now have access to the BioDAO sandbox. The Bio team will reach out to you via email shortly to schedule a call to discuss next steps.";
+    
+    // Create a properly formatted level-up message that matches other level-up notifications
+    const levelUpMessage = `## Level ${newLevel} Unlocked! 🎉
 
+**Congratulations!** Your BioDAO community has reached critical mass with:
+- **${project.Discord.memberCount} members**
+- **${project.Discord.papersShared} scientific papers shared**
+- **${project.Discord.messagesCount} messages** in your server
+
+You've advanced to **Level ${newLevel}** and now have access to the BioDAO sandbox!
+
+The Bio team will contact you via email shortly to schedule a call to discuss your next steps.`;
+
+    // Save level-up message to chat
     await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
 
     // Send notification if user is connected
     const userConnection = activeConnections[project.id];
     if (userConnection) {
+      // Send level-up message as a regular chat message
       userConnection.send(
         JSON.stringify({
           type: 'message',
           content: levelUpMessage,
-          action: 'LEVEL_UP',
           isFromAgent: true,
+          action: 'LEVEL_UP',
         })
       );
+      
+      // Also send dedicated level-up event with proper metadata
       userConnection.send(
         JSON.stringify({
           type: 'level_up',
           previousLevel: 3,
-          newLevel: 4,
+          newLevel: newLevel,
           message: levelUpMessage,
           nextLevelRequirements: [
             'All requirements completed - congratulations!',
@@ -2540,8 +2690,21 @@ async function checkAndUpdateUserLevel(project: any) {
       );
     }
 
-    // Send sandbox notification email to James
-    await sendSandboxEmail(project);
+    // Record that we've sent this level-up notification
+    recordLevelUpSent(project.id, newLevel);
+
+    // Send email notifications
+    if (project.email) {
+      try {
+        // Send level up email
+        await sendLevelUpEmail(project.email, newLevel);
+        
+        // Send sandbox email for final level
+        await sendSandboxEmail(project);
+      } catch (error) {
+        console.error(`Error sending emails to ${project.email}:`, error);
+      }
+    }
   }
 }
 
@@ -2554,6 +2717,32 @@ function normalizeMarkdown(content: string): string {
   normalized = normalized.replace(/(\* .+)(\n)(?!\n|\* )/g, '$1\n');
   normalized = normalized.replace(/^(\s*\n)+|((\n\s*)+)$/g, '');
   return normalized;
+}
+
+// Function to check if a level-up notification was recently sent
+function wasLevelUpRecentlySent(userId: string, newLevel: number): boolean {
+  const now = Date.now();
+  const userLevelUps = recentLevelUpsByUser.get(userId);
+  
+  if (!userLevelUps) return false;
+  
+  const lastSentTimestamp = userLevelUps.get(newLevel);
+  if (!lastSentTimestamp) return false;
+  
+  // Consider a level-up notification as "recent" if it was sent in the last 60 seconds
+  return (now - lastSentTimestamp) < 30000; // 60 seconds
+}
+
+// Function to record that a level-up notification was sent
+function recordLevelUpSent(userId: string, newLevel: number): void {
+  let userLevelUps = recentLevelUpsByUser.get(userId);
+  
+  if (!userLevelUps) {
+    userLevelUps = new Map<number, number>();
+    recentLevelUpsByUser.set(userId, userLevelUps);
+  }
+  
+  userLevelUps.set(newLevel, Date.now());
 }
 
 export {

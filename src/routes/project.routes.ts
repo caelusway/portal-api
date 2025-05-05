@@ -404,6 +404,8 @@ router.post('/', async (req: any, res: any) => {
           projectName,
           projectDescription,
           projectVision,
+          projectLinks,
+          referralSource,
           scientificReferences,
           credentialLinks,
           teamDescription,

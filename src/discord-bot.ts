@@ -1156,7 +1156,7 @@ export function initDiscordBot() {
 
       // Check level requirements when specific member count thresholds are hit
       const memberCount = guild.memberCount;
-      if (memberCount === 4 || memberCount === 10 || memberCount % 5 === 0) {
+      if (memberCount === 4 || memberCount === 10) {
         console.log(
           `[Discord Bot] Member milestone reached (${memberCount}) - checking level requirements`
         );
