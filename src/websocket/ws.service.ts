@@ -499,7 +499,7 @@ async function handleMessage(ws: WebSocket, data: any): Promise<void> {
 
     // If no action was taken directly, use the AI to respond
     if (actionTaken.length === 0) {
-      await handleAIInteraction(ws, userId, data.content, project.name || 'User');
+      await handleAIInteraction(ws, userId, data.content, project.projectName || 'User');
     }
   } catch (error) {
     console.error('Error handling message:', error);
@@ -599,8 +599,8 @@ async function handleCheckDiscordStats(ws: WebSocket, userId: string): Promise<v
     }
 
     // Get Discord info if available
-    const discord = project.discord;
-    if (!discord) {
+
+    if (!project.Discord) {
       ws.send(
         JSON.stringify({
           type: 'discord_info',
@@ -619,14 +619,14 @@ async function handleCheckDiscordStats(ws: WebSocket, userId: string): Promise<v
       JSON.stringify({
         type: 'discord_info',
         discord: {
-          serverId: discord.serverId,
-          serverName: discord.serverName || 'Your Discord Server',
-          memberCount: discord.memberCount,
-          messagesCount: discord.messagesCount,
-          papersShared: discord.papersShared,
-          botAdded: discord.botAdded,
-          verified: discord.verified,
-          botInstallationUrl: !discord.botAdded ? botStatus.installationLink : null,
+          serverId: project.Discord.serverId,
+          serverName: project.Discord.serverName || 'Your Discord Server',
+          memberCount: project.Discord.memberCount,
+          messagesCount: project.Discord.messagesCount,
+          papersShared: project.Discord.papersShared,
+          botAdded: project.Discord.botAdded,
+          verified: project.Discord.verified,
+          botInstallationUrl: !project.Discord.botAdded ? botStatus.installationLink : null,
         },
       })
     );
@@ -859,8 +859,8 @@ async function sendCoreAgentGuidance(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        nfts: true,
-        discord: true,
+        NFTs: true,
+        Discord: true,
       },
     });
 
@@ -874,21 +874,21 @@ async function sendCoreAgentGuidance(
 
     // Prepare Discord stats if available
     let discordStats = null;
-    if (project.discord) {
+    if (project.Discord) {
       discordStats = {
-        serverName: project.discord.serverName,
-        memberCount: project.discord.memberCount,
-        papersShared: project.discord.papersShared,
-        messagesCount: project.discord.messagesCount,
-        qualityScore: project.discord.qualityScore,
-        botAdded: project.discord.botAdded,
-        verified: project.discord.verified,
+        serverName: project.Discord.serverName,
+        memberCount: project.Discord.memberCount,
+        papersShared: project.Discord.papersShared,
+        messagesCount: project.Discord.messagesCount,
+        qualityScore: project.Discord.qualityScore,
+        botAdded: project.Discord.botAdded,
+        verified: project.Discord.verified,
       };
     }
 
     // Get bot installation status and URL if needed for level 2 users without bot
     let botInstallationUrl = null;
-    if (project.level === 2 && project.discord && !project.discord.botAdded) {
+    if (project.level === 2 && project.Discord && !project.Discord.botAdded) {
       const botStatus = await getBotInstallationStatus(userId);
       botInstallationUrl = botStatus.installationLink;
     }
@@ -1120,8 +1120,8 @@ async function handleAIInteraction(
         id: userId,
       },
       include: {
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
       },
     });
 
@@ -1136,18 +1136,18 @@ async function handleAIInteraction(
     }
 
     // Ensure we have the latest Discord stats if they exist
-    let discordStats = project.discord;
+    let discordStats = project.Discord;
 
-    if (project.level >= 2 && project.discord) {
+    if (project.level >= 2 && project.Discord) {
       // Refresh Discord stats from API if possible
       try {
-        const { inviteCode } = extractDiscordInfo(project.discord.inviteLink || '');
+        const { inviteCode } = extractDiscordInfo(project.Discord.inviteLink || '');
         if (inviteCode) {
           const serverInfo = await fetchDiscordServerInfo(inviteCode);
           if (serverInfo.approximateMemberCount) {
             // Update member count in database
             await prisma.discord.update({
-              where: { id: project.discord.id },
+              where: { id: project.Discord.id },
               data: {
                 memberCount: serverInfo.approximateMemberCount,
                 updatedAt: new Date(),
@@ -1156,7 +1156,7 @@ async function handleAIInteraction(
 
             // Update local copy for this request
             discordStats = {
-              ...project.discord,
+              ...project.Discord,
               memberCount: serverInfo.approximateMemberCount,
             };
 
@@ -1799,8 +1799,8 @@ async function checkLevelUpConditions(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
         members: { include: { bioUser: true } }, // Added this line
       },
     });
@@ -2166,8 +2166,8 @@ async function handleBotInstalled(
     const project = await prisma.project.findUnique({
       where: { id: userId },
       include: {
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
         members: { include: { bioUser: true } }, // Added this line
       },
     });
@@ -2355,7 +2355,7 @@ async function handleGuildCreate(
       console.log(`[WS Service - handleGuildCreate] Looking up project with ID: ${discordRecord.projectId}`);
       const project = await prisma.project.findUnique({
         where: { id: discordRecord.projectId },
-        include: { discord: true, nfts: true, members: { include: { bioUser: true } } }, // Added members relation here
+        include: { Discord: true, NFTs: true, members: { include: { bioUser: true } } }, // Added members relation here
       });
 
       if (project) {

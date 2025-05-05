@@ -129,8 +129,8 @@ export const ProjectService = {
             bioUser: true,
           },
         },
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
       },
     });
   },
@@ -139,8 +139,8 @@ export const ProjectService = {
     return prisma.project.findFirst({
       where: { members: { some: { bioUser: { wallet } } } },
       include: {
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
       },
     });
   },
@@ -149,8 +149,8 @@ export const ProjectService = {
     return prisma.project.findFirst({
       where: { members: { some: { bioUser: { privyId } } } },
       include: {
-        discord: true,
-        nfts: true,
+        Discord: true,
+        NFTs: true,
       },
     });
   },
@@ -385,6 +385,15 @@ export const ProjectMemberService = {
       where: {
         bioUserId_projectId: { bioUserId, projectId },
       },
+    });
+  },
+
+  findByPrivyIdAndProjectId: async (privyId: string, projectId: string) => {
+    return prisma.projectMember.findFirst({
+      where: {
+        projectId,
+        bioUser: { privyId }
+      }
     });
   },
 

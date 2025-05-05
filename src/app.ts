@@ -7,6 +7,7 @@ import apiRoutes from './routes';
 import config from './config';
 import { initWebSocketServer } from './websocket/ws.service';
 import { initDiscordBot } from './discord-bot';
+import { validateApiKey } from './middleware/apiKey.middleware';
 
 // Create express app
 const app = express();
@@ -23,12 +24,11 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
 }));
 
 app.use(express.json());
 app.use(bodyParser.json());
-app.use(express.static(config.publicPath));
 
 // Initialize WebSocket server
 const wss = initWebSocketServer(server);
@@ -39,7 +39,7 @@ if (config.discord.botToken) {
 }
 
 // Register API routes
-app.use('/api', apiRoutes);
+app.use('/api', validateApiKey, apiRoutes);
 
 // Catch-all route for the client app
 app.get('*', (req, res) => {

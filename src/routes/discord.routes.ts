@@ -77,7 +77,7 @@ router.get('/:projectId', async (req: any, res: any) => {
         members: {
           current: discordStats.memberCount,
           required: 4,
-          percent: Math.min(100, Math.round((discordStats.memberCount / 4) * 100)),
+          percent: Math.min(100, Math.round((discordStats.memberCount || 0 / 4) * 100)),
         },
       };
     } else if (currentLevel === 3) {
@@ -86,17 +86,17 @@ router.get('/:projectId', async (req: any, res: any) => {
         members: {
           current: discordStats.memberCount,
           required: 5,
-          percent: Math.min(100, Math.round((discordStats.memberCount / 5) * 100)),
+          percent: Math.min(100, Math.round((discordStats.memberCount || 0 / 5) * 100)),
         },
         messages: {
           current: discordStats.messagesCount,
           required: 50,
-          percent: Math.min(100, Math.round((discordStats.messagesCount / 50) * 100)),
+          percent: Math.min(100, Math.round((discordStats.messagesCount || 0 / 50) * 100)),
         },
         papers: {
           current: discordStats.papersShared,
           required: 5,
-          percent: Math.min(100, Math.round((discordStats.papersShared / 5) * 100)),
+          percent: Math.min(100, Math.round((discordStats.papersShared || 0 / 5) * 100)),
         },
       };
     }
@@ -566,15 +566,18 @@ router.post('/check-level-requirements', async (req: any, res: any) => {
     let newLevel = previousLevel;
 
     // Level 2 to 3: Check if they have enough members (4+)
-    if (previousLevel === 2 && discord.botAdded && discord.memberCount >= 4) {
+    if (previousLevel === 2 && discord.botAdded && discord.memberCount !== null && discord.memberCount >= 4 ) {
       levelUp = true;
       newLevel = 3;
     }
     // Level 3 to 4: Check Discord metrics
     else if (
       previousLevel === 3 &&
+      discord.memberCount !== null &&
       discord.memberCount >= 5 &&
+      discord.papersShared !== null &&
       discord.papersShared >= 5 &&
+      discord.messagesCount !== null &&
       discord.messagesCount >= 50
     ) {
       levelUp = true;

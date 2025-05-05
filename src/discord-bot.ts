@@ -566,6 +566,7 @@ client.on(Events.MessageCreate, async (message) => {
             // Level 3 to 4 transition depends heavily on message count
             if (
               project.level === 3 &&
+              updatedRecord.memberCount &&
               updatedRecord.memberCount >= 5 &&
               updatedRecord.papersShared >= 5 &&
               updatedRecord.messagesCount >= 50

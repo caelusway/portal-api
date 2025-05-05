@@ -185,7 +185,7 @@ export const EmailService = {
   ): Promise<void> => {
     try {
       // Build the invitation URL with correct path format
-      const frontendUrl = process.env.FRONTEND_URL || 'https://app.biodao.xyz';
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       const inviteUrl = `${frontendUrl}/accept-invite?token=${inviteToken}`;
 
       // Prepare email content

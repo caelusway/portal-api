@@ -16,7 +16,23 @@ model BioUser {
   fullName     String?
   avatarUrl    String?
   referralCode String?   @unique @default(uuid()) // Auto-generate a referral code
+  
+  // Discord connection fields
+  discordId    String?   @unique // Discord user ID
+  discordUsername String? // Discord username
+  discordAvatar  String? // Discord avatar URL
+  discordConnectedAt DateTime? // When the user connected their Discord
+  discordRefreshToken String? // For refreshing Discord auth
+  discordAccessToken String? // For Discord API access
 
+  // Twitter connection fields
+  twitterId    String?   @unique // Twitter user ID
+  twitterUsername String? // Twitter handle/username
+  twitterName  String?   // Twitter display name
+  twitterAvatar String?  // Twitter profile image URL
+  twitterConnectedAt DateTime? // When the user connected their Twitter
+  twitterAccessToken String? // For Twitter API access
+  twitterRefreshToken String? // For Twitter API refresh
 
   // Relationships
   memberships  ProjectMember[]   // Projects the user is a member of
@@ -35,17 +51,15 @@ model BioUser {
 // New Model for the shared Project/DAO/Team
 model Project {
   id                   String           @id @default(uuid())
-  wallet               String           @unique
   privyId              String?          @unique
   level                Int              @default(1)
-  fullName             String?
-  email                String?
   projectName          String?
   projectDescription   String?
   projectVision        String?
   scientificReferences String?
   credentialLinks      String?
   teamMembers          String?
+  teamDescription      String?
   motivation           String?
   progress             String?
   referralCode         String?          @unique

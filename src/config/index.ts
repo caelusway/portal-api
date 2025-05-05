@@ -10,6 +10,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 // API Keys
 const API_KEY = process.env.API_KEY || 'dev_api_key';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const PORTAL_API_KEY = process.env.PORTAL_API_KEY;
 
 // Discord
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -40,6 +41,9 @@ export default {
   },
   openai: {
     apiKey: OPENAI_API_KEY,
+  },
+  security: {
+    apiKey: PORTAL_API_KEY,
   },
   discord: {
     botToken: DISCORD_BOT_TOKEN,

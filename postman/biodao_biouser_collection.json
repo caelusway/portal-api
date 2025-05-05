@@ -1,0 +1,477 @@
+{
+  "info": {
+    "name": "BioDAO BioUser API",
+    "description": "Collection for testing BioDAO BioUser API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "BioUser",
+      "item": [
+        {
+          "name": "Create BioUser",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"privyId\": \"test-privy-id\",\n    \"wallet\": \"0xTestWalletAddress\",\n    \"email\": \"user@example.com\",\n    \"fullName\": \"Test User\",\n    \"avatarUrl\": \"https://example.com/avatar.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "description": "Create a new BioUser"
+          }
+        },
+        {
+          "name": "Get BioUser by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get a BioUser by ID"
+          }
+        },
+        {
+          "name": "Get BioUser by PrivyId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/privy/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "privy",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Get a BioUser by PrivyId"
+          }
+        },
+        {
+          "name": "Get BioUser by Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/wallet/{{walletAddress}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "wallet",
+                "{{walletAddress}}"
+              ]
+            },
+            "description": "Get a BioUser by wallet address"
+          }
+        },
+        {
+          "name": "Update BioUser",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"updated@example.com\",\n    \"fullName\": \"Updated User Name\",\n    \"avatarUrl\": \"https://example.com/new-avatar.jpg\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Update a BioUser by ID"
+          }
+        },
+        {
+          "name": "Update BioUser by PrivyId",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"updated@example.com\",\n    \"fullName\": \"Updated User Name\",\n    \"avatarUrl\": \"https://example.com/new-avatar.jpg\",\n    \"wallet\": \"0xUpdatedWalletAddress\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/privy/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "privy",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Update a BioUser by PrivyId"
+          }
+        },
+        {
+          "name": "Delete BioUser",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Delete a BioUser by ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BioUser Memberships",
+      "item": [
+        {
+          "name": "Get User Memberships",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/memberships",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "memberships"
+              ]
+            },
+            "description": "Get all project memberships for a BioUser"
+          }
+        },
+        {
+          "name": "Add Project Membership",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"projectId\": \"{{projectId}}\",\n    \"role\": \"member\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/memberships",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "memberships"
+              ]
+            },
+            "description": "Add a project membership for a BioUser"
+          }
+        },
+        {
+          "name": "Update Membership Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"role\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/memberships/{{membershipId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "memberships",
+                "{{membershipId}}"
+              ]
+            },
+            "description": "Update a project membership role for a BioUser"
+          }
+        },
+        {
+          "name": "Remove Membership",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/memberships/{{membershipId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "memberships",
+                "{{membershipId}}"
+              ]
+            },
+            "description": "Remove a project membership for a BioUser"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BioUser Referrals",
+      "item": [
+        {
+          "name": "Get User Referrals",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/referrals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "referrals"
+              ]
+            },
+            "description": "Get all referrals made by a BioUser"
+          }
+        },
+        {
+          "name": "Get User Referral Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/referral-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "referral-code"
+              ]
+            },
+            "description": "Get the referral code for a BioUser"
+          }
+        },
+        {
+          "name": "Generate New Referral Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/referral-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "referral-code"
+              ]
+            },
+            "description": "Generate a new referral code for a BioUser"
+          }
+        },
+        {
+          "name": "Apply Referral Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"referralCode\": \"{{referralCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/apply-referral",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}",
+                "apply-referral"
+              ]
+            },
+            "description": "Apply a referral code to a BioUser"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user-123",
+      "type": "string"
+    },
+    {
+      "key": "privyId",
+      "value": "test-privy-id",
+      "type": "string"
+    },
+    {
+      "key": "walletAddress",
+      "value": "0xTestWalletAddress",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "project-123",
+      "type": "string"
+    },
+    {
+      "key": "membershipId",
+      "value": "membership-123",
+      "type": "string"
+    },
+    {
+      "key": "referralCode",
+      "value": "TEST123",
+      "type": "string"
+    }
+  ]
+} 

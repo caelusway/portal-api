@@ -6,6 +6,7 @@ import discordRoutes from './discord.routes';
 import nftRoutes from './nft.routes';
 import referralRoutes from './referral';
 import inviteRoutes from './invite.routes';
+import userRoutes from './user.routes';
 
 const router = express.Router();
 
@@ -22,5 +23,6 @@ router.use('/discord', discordRoutes);
 router.use('/nfts', nftRoutes);
 router.use('/referral', referralRoutes);
 router.use('/invites', inviteRoutes);
+router.use('/users', userRoutes);
 
 export default router;

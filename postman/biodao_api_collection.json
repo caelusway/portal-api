@@ -1,0 +1,1067 @@
+{
+  "info": {
+    "name": "BioDAO API",
+    "description": "Collection for testing BioDAO API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Authenticate User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"privyId\": \"test-privy-id\",\n    \"wallet\": \"0xTestWalletAddress\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/privy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "privy"
+              ]
+            },
+            "description": "Authenticate a user via Privy ID and wallet address"
+          }
+        },
+        {
+          "name": "Get User by PrivyId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/user/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "user",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Get user by Privy ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Get Project by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Get project by ID"
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"projectName\": \"Updated Project Name\",\n    \"projectDescription\": \"Updated project description\",\n    \"projectVision\": \"Updated project vision\",\n    \"teamDescription\": \"Updated team description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Update project details"
+          }
+        },
+        {
+          "name": "Get Project by PrivyId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/privy/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "privy",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Get project by privyId"
+          }
+        },
+        {
+          "name": "Create/Update Project by PrivyId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"projectName\": \"New Project\",\n    \"projectDescription\": \"A scientific project\",\n    \"projectVision\": \"Our vision is to revolutionize research\",\n    \"scientificReferences\": \"References to scientific papers\",\n    \"credentialLinks\": \"Links to credentials\",\n    \"teamDescription\": \"Team of researchers\",\n    \"motivation\": \"Motivated by science\",\n    \"progress\": \"Making progress\",\n    \"wallet\": \"0xTestWallet\",\n    \"projectLinks\": \"https://example.com\",\n    \"referralSource\": \"Direct\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/privy/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "privy",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Create or update a project by privyId"
+          }
+        },
+        {
+          "name": "Delete Project by PrivyId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/privy/{{privyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "privy",
+                "{{privyId}}"
+              ]
+            },
+            "description": "Delete a project by privyId"
+          }
+        },
+        {
+          "name": "Get Project NFTs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/nfts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "nfts"
+              ]
+            },
+            "description": "Get NFTs by project ID"
+          }
+        },
+        {
+          "name": "Get Project Discord",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/discord",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "discord"
+              ]
+            },
+            "description": "Get Discord info by project ID"
+          }
+        },
+        {
+          "name": "Get Project by Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/wallet/{{walletAddress}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "wallet",
+                "{{walletAddress}}"
+              ]
+            },
+            "description": "Get project by wallet address"
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"privyId\": \"test-privy-id\",\n    \"wallet\": \"0xTestWallet\",\n    \"fullName\": \"Test User\",\n    \"email\": \"test@example.com\",\n    \"projectName\": \"New Project\",\n    \"projectLinks\": \"https://example.com\",\n    \"referralSource\": \"Direct\",\n    \"projectDescription\": \"A scientific project\",\n    \"projectVision\": \"Our vision\",\n    \"scientificReferences\": \"References\",\n    \"credentialLinks\": \"Credentials\",\n    \"teamDescription\": \"Team\",\n    \"motivation\": \"Motivation\",\n    \"progress\": \"Progress\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects"
+              ]
+            },
+            "description": "Create or update a project"
+          }
+        },
+        {
+          "name": "Patch Project",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"projectName\": \"Updated Project Name\",\n    \"projectDescription\": \"Updated Description\",\n    \"projectVision\": \"Updated Vision\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Update a project"
+          }
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Delete a project"
+          }
+        },
+        {
+          "name": "Send Project Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"inviteeEmail\": \"collaborator@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/invites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "invites"
+              ]
+            },
+            "description": "Send an invitation to collaborate on a project"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Get Chat Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/sessions/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "sessions",
+                "{{userId}}"
+              ]
+            },
+            "description": "Get chat sessions for a user"
+          }
+        },
+        {
+          "name": "Get Chat Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/messages/{{sessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "messages",
+                "{{sessionId}}"
+              ]
+            },
+            "description": "Get messages for a chat session"
+          }
+        },
+        {
+          "name": "Get Messages by Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/messages/session/{{sessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "messages",
+                "session",
+                "{{sessionId}}"
+              ]
+            },
+            "description": "Get messages for a chat session (alternative endpoint)"
+          }
+        },
+        {
+          "name": "Get Project Sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/sessions/project/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "sessions",
+                "project",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Get chat sessions for a project"
+          }
+        },
+        {
+          "name": "Save Chat Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"This is a new message\",\n    \"isFromAgent\": false,\n    \"actionTaken\": \"none\",\n    \"actionSuccess\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/messages/{{sessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "messages",
+                "{{sessionId}}"
+              ]
+            },
+            "description": "Save a new chat message"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Discord",
+      "item": [
+        {
+          "name": "Get Discord Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/discord/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "discord",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Get Discord stats with detailed progress information"
+          }
+        },
+        {
+          "name": "Get Discord Server Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/discord/info/{{serverId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "discord",
+                "info",
+                "{{serverId}}"
+              ]
+            },
+            "description": "Get Discord server info"
+          }
+        },
+        {
+          "name": "Set Up Discord",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{projectId}}\",\n    \"discordInvite\": \"https://discord.gg/example\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/discord/setup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "discord",
+                "setup"
+              ]
+            },
+            "description": "Set up Discord server for a project"
+          }
+        },
+        {
+          "name": "Get Project Discord",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/discord/projects/{{projectId}}/discord",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "discord",
+                "projects",
+                "{{projectId}}",
+                "discord"
+              ]
+            },
+            "description": "Get Discord server for a project"
+          }
+        },
+        {
+          "name": "Get Debug Discord Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/discord/debug/discord-stats/{{serverId}}?apiKey={{apiKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "discord",
+                "debug",
+                "discord-stats",
+                "{{serverId}}"
+              ],
+              "query": [
+                {
+                  "key": "apiKey",
+                  "value": "{{apiKey}}"
+                }
+              ]
+            },
+            "description": "Get detailed Discord stats for debugging"
+          }
+        },
+        {
+          "name": "Bot Installed Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"guildId\": \"{{serverId}}\",\n    \"guildName\": \"Test Guild\",\n    \"memberCount\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discord/bot-installed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "discord",
+                "bot-installed"
+              ]
+            },
+            "description": "Handle Discord bot installation notification"
+          }
+        },
+        {
+          "name": "Update Discord Stats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"guildId\": \"{{serverId}}\",\n    \"memberCount\": 15,\n    \"messagesCount\": 100,\n    \"papersShared\": 5,\n    \"qualityScore\": 75\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discord/stats-update",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "discord",
+                "stats-update"
+              ]
+            },
+            "description": "Handle Discord stats updates"
+          }
+        },
+        {
+          "name": "Check Level Requirements",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"guildId\": \"{{serverId}}\",\n    \"source\": \"api-test\",\n    \"event\": \"manual-check\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discord/check-level-requirements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "discord",
+                "check-level-requirements"
+              ]
+            },
+            "description": "Check if a guild meets level-up requirements"
+          }
+        },
+        {
+          "name": "Bot Events",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"event\": \"test-event\",\n    \"guildId\": \"{{serverId}}\",\n    \"memberCount\": 15,\n    \"messagesCount\": 100,\n    \"papersShared\": 5,\n    \"qualityScore\": 75\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discord/bot-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "discord",
+                "bot-events"
+              ]
+            },
+            "description": "Handle Discord bot events"
+          }
+        }
+      ]
+    },
+    {
+      "name": "NFTs",
+      "item": [
+        {
+          "name": "Get NFTs by Project",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/nfts/{{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "nfts",
+                "{{projectId}}"
+              ]
+            },
+            "description": "Get NFTs for a project"
+          }
+        },
+        {
+          "name": "Mint NFT",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"projectId\": \"{{projectId}}\",\n    \"walletAddress\": \"0xTestWallet\",\n    \"nftType\": \"idea\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/nfts/mint",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "nfts",
+                "mint"
+              ]
+            },
+            "description": "Mint a new NFT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Invites",
+      "item": [
+        {
+          "name": "Verify Invitation Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invites/verify?token={{inviteToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invites",
+                "verify"
+              ],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{inviteToken}}"
+                }
+              ]
+            },
+            "description": "Verify an invitation token"
+          }
+        },
+        {
+          "name": "Accept Invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{inviteToken}}\",\n    \"userId\": \"{{userId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/invites/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invites",
+                "accept"
+              ]
+            },
+            "description": "Accept an invitation to join a project"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Referral",
+      "item": [
+        {
+          "name": "Get Referral Code",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/referral/code?projectId={{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "referral",
+                "code"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}"
+                }
+              ]
+            },
+            "description": "Get or create a referral code for a project"
+          }
+        },
+        {
+          "name": "Use Referral Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"newProjectId\": \"{{newProjectId}}\",\n    \"code\": \"REFERCODE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/referral/use",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "referral",
+                "use"
+              ]
+            },
+            "description": "Use a referral code"
+          }
+        },
+        {
+          "name": "Get Referral Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/referral/stats?projectId={{projectId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "referral",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "projectId",
+                  "value": "{{projectId}}"
+                }
+              ]
+            },
+            "description": "Get referral statistics for a project"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "test-api-key",
+      "type": "string"
+    },
+    {
+      "key": "projectId",
+      "value": "project-123",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user-123",
+      "type": "string"
+    },
+    {
+      "key": "privyId",
+      "value": "test-privy-id",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "session-123",
+      "type": "string"
+    },
+    {
+      "key": "serverId",
+      "value": "discord-server-123",
+      "type": "string"
+    },
+    {
+      "key": "walletAddress",
+      "value": "0xTestWallet",
+      "type": "string"
+    },
+    {
+      "key": "inviteToken",
+      "value": "invite-token-123",
+      "type": "string"
+    },
+    {
+      "key": "newProjectId",
+      "value": "new-project-123",
+      "type": "string"
+    }
+  ]
+} 
