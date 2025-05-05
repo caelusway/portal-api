@@ -2087,7 +2087,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
       case 2:
         // Check level 2 to 3 conditions (Discord created with members)
         const discordInfo = await DiscordService.getByProjectId(project.id);
-        if (discordInfo && discordInfo.verified && discordInfo.memberCount >= 4) {
+        if (discordInfo && discordInfo.verified && discordInfo.memberCount && discordInfo.memberCount >= 4) {
           // Check if we've recently sent this level-up notification
           if (wasLevelUpRecentlySent(project.id, 3)) {
             console.log(`Skipping duplicate level 3 notification for user ${project.id} (sent recently)`);
