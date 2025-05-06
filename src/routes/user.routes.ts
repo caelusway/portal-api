@@ -1059,6 +1059,135 @@ router.put('/:id/refresh-twitter', async (req: any, res: any) => {
   }
 });
 
+/**
+ * PUT /api/users/:id/social-connections
+ * Update a user's social connections (Discord or Twitter)
+ * Can also disconnect by passing platformId as null, "null", or "none"
+ */
+router.put('/:id/social-connections', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { 
+      platform, 
+      platformId, 
+      username, 
+      email, 
+      avatarUrl 
+    } = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        error: 'User ID is required',
+      });
+    }
+
+    if (!platform) {
+      return res.status(400).json({
+        error: 'Platform is required',
+      });
+    }
+
+    // Verify platform is supported
+    if (platform !== 'discord' && platform !== 'twitter') {
+      return res.status(400).json({
+        error: 'Platform must be either "discord" or "twitter"',
+      });
+    }
+
+    // Find the user
+    const user = await prisma.bioUser.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'BioUser not found',
+      });
+    }
+
+    // Check if this is a disconnection request
+    const isDisconnecting = !platformId || platformId === "null" || platformId === "none";
+
+    // Prepare update data based on platform
+    let updateData: any = {};
+    
+    if (isDisconnecting) {
+      // Handle disconnection - set all relevant fields to null
+      if (platform === 'discord') {
+        updateData = {
+          discordId: null,
+          discordUsername: null,
+          discordAvatar: null,
+          discordAccessToken: null,
+          discordRefreshToken: null,
+          discordConnectedAt: null,
+        };
+      } else if (platform === 'twitter') {
+        updateData = {
+          twitterId: null,
+          twitterUsername: null,
+          twitterAvatar: null,
+          twitterAccessToken: null,
+          twitterRefreshToken: null,
+          twitterConnectedAt: null,
+        };
+      }
+    } else {
+      // This is a connection update
+      if (!username) {
+        return res.status(400).json({
+          error: 'Username is required for connection',
+        });
+      }
+      
+      // Check if another user already has this platform ID connected
+      const existingUserWithPlatformId = platform === 'discord'
+        ? await prisma.bioUser.findUnique({ where: { discordId: platformId } })
+        : await prisma.bioUser.findUnique({ where: { twitterId: platformId } });
+
+      if (existingUserWithPlatformId && existingUserWithPlatformId.id !== id) {
+        return res.status(409).json({
+          error: `Another user is already connected to this ${platform} account`,
+        });
+      }
+
+      if (platform === 'discord') {
+        updateData = {
+          discordId: platformId,
+          discordUsername: username,
+          discordAvatar: avatarUrl,
+          discordConnectedAt: new Date(),
+        };
+      } else if (platform === 'twitter') {
+        updateData = {
+          twitterId: platformId,
+          twitterUsername: username,
+          twitterAvatar: avatarUrl,
+          twitterConnectedAt: new Date(),
+        };
+      }
+    }
+
+    // Update the user
+    const updatedUser = await prisma.bioUser.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return res.json({
+      success: true,
+      user: updatedUser,
+      action: isDisconnecting ? 'disconnected' : 'connected',
+      platform
+    });
+  } catch (error) {
+    console.error('Error updating user social connections:', error);
+    return res.status(500).json({
+      error: 'Failed to update user social connections',
+    });
+  }
+});
+
 // Helper function to generate a unique referral code
 async function generateReferralCode() {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

@@ -1513,7 +1513,7 @@ async function handleDiscordSetup(
 
     // Generate bot installation URL with verification token
     // This token will be passed back when the bot is added, confirming the proper server
-    const botInstallationUrl = `https://discord.com/api/oauth2/authorize?client_id=1361285493521907832&permissions=8&scope=bot&guild_id=${finalServerId}&state=${verificationToken}`;
+    const botInstallationUrl = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot&guild_id=${finalServerId}&state=${verificationToken}`;
 
     // Format server display info
     const serverDisplayName = serverName || `Server ID: ${finalServerId.substring(0, 10)}...`;

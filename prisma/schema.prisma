@@ -87,6 +87,49 @@ model NFT {
   mintedAt        DateTime @default(now())
 }
 
+// New Model for tracking Discord members
+model DiscordMember {
+  id                  String   @id @default(uuid())
+  discordId           String   @unique // Discord user ID
+  discordUsername     String   // Discord username
+  discordAvatar       String?  // Discord avatar URL
+  linkedinUrl         String?  // LinkedIn profile URL
+  scientificProfileUrl String? // URL to scientific profile (e.g., Google Scholar, ORCID, ResearchGate)
+  motivationToJoin    String?  @db.Text // Why they joined the Discord/BioDAO
+  isOnboarded         Boolean  @default(false) // Whether they've completed onboarding
+  paperContributions  Int      @default(0) // Count of research papers shared
+  messageCount        Int      @default(0) // Count of messages sent
+  
+  // Link to the Discord server they're a member of
+  discordServerId     String
+  discord             Discord  @relation(fields: [discordServerId], references: [serverId], onDelete: Cascade)
+  
+  // New relation to scientific profiles
+  scientificProfiles  ScientificProfile[]
+  
+  joinedAt            DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// New Model for tracking multiple scientific profiles per Discord member
+model ScientificProfile {
+  id              String        @id @default(uuid())
+  url             String        // The full URL to the scientific profile
+  platform        String        // e.g., "Google Scholar", "ORCID", "ResearchGate", "Exaly"
+  profileId       String?       // The ID/username from the platform (if extractable)
+  hIndex          Int?          // H-index if available
+  citations       Int?          // Citation count if available
+  
+  // Relation to the Discord member
+  memberId        String
+  member          DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  lastScraped     DateTime?     // When profile metrics were last updated
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
 // Updated Discord Model
 model Discord {
   id                String    @id @default(uuid())
@@ -104,6 +147,7 @@ model Discord {
   serverName        String?
   projectId         String    @unique
   project           Project   @relation(fields: [projectId], references: [id])
+  members           DiscordMember[] // New relation to track Discord members
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }

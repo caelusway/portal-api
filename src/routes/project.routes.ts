@@ -410,8 +410,6 @@ router.post('/', async (req: any, res: any) => {
           credentialLinks,
           teamDescription,
           teamMembers,
-          projectLinks,
-          referralSource,
           motivation,
           progress,
           level: 1, // Default to level 1
