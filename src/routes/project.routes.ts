@@ -310,6 +310,7 @@ router.put('/:projectId/twitter', async (req: any, res: any) => {
       where: { projectId },
     });
 
+    
     if (twitterRecord) {
       // Update existing Twitter record
       twitterRecord = await prisma.twitter.update({
