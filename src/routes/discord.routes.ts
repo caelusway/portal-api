@@ -551,6 +551,11 @@ router.post('/check-level-requirements', async (req: any, res: any) => {
       include: {
         Discord: true,
         NFTs: true,
+        members: {
+          include: {
+            bioUser: true
+          }
+        }
       },
     });
 
@@ -597,11 +602,12 @@ router.post('/check-level-requirements', async (req: any, res: any) => {
       });
 
       // If the user has an email, send a level-up email
-      if (project.email) {
+      const founderEmail = project.members?.find(m => m.role === 'founder')?.bioUser?.email;
+      if (founderEmail) {
         try {
           // This would be implemented elsewhere
-          // await sendLevelUpEmail(project.email, newLevel);
-          console.log(`Level-up email sent to ${project.email} for level ${newLevel}`);
+          // await sendLevelUpEmail(founderEmail, newLevel);
+          console.log(`Level-up email sent to ${founderEmail} for level ${newLevel}`);
         } catch (emailError) {
           console.error('Error sending level-up email:', emailError);
         }

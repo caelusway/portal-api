@@ -1,0 +1,29 @@
+# Environment Variables for Migration Script
+
+# Old Database URL (source database)
+# Include 'sslmode=no-verify' or similar parameter if encountering certificate issues
+OLD_DATABASE_URL="postgresql://username:password@old-host:5432/old-database?sslmode=no-verify"
+
+# New Database URL (target database)
+DATABASE_URL="postgresql://username:password@new-host:5432/new-database"
+
+# To run the migration:
+# 1. Copy this file to .env in the project root
+# 2. Update the connection strings with your actual database credentials
+# 3. Run the migration script with: npx ts-node prisma/migrations/manual/migrate_data.ts
+
+# Troubleshooting:
+# - SSL certificate issues: Add ?sslmode=no-verify or ?ssl=false to the connection strings
+# - If using Heroku or managed DB services, you may need to set additional parameters
+
+# Optional: Discord API credentials (not needed for migration, but included for reference)
+DISCORD_CLIENT_ID="your_discord_client_id"
+DISCORD_BOT_TOKEN="your_discord_bot_token"
+DISCORD_CLIENT_SECRET="your_discord_client_secret"
+
+# Optional: Twitter API credentials (not needed for migration, but included for reference)
+TWITTER_BEARER_TOKEN="your_twitter_bearer_token"
+
+# Application settings
+PORT=3001
+NODE_ENV="development" 

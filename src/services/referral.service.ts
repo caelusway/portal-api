@@ -36,9 +36,28 @@ export async function useReferralCode(newProjectId: string, code: string): Promi
 }
 
 export async function getReferralStats(projectId: string) {
-  const referrals = await prisma.project.findMany({ where: { referredById: projectId } });
+  const referrals = await prisma.project.findMany({
+    where: { referredById: projectId },
+    include: {
+      members: {
+        where: { role: 'founder' },
+        include: {
+          bioUser: {
+            select: {
+              email: true
+            }
+          }
+        }
+      }
+    }
+  });
+  
   return {
     count: referrals.length,
-    referrals: referrals.map(r => ({ id: r.id, email: r.email, projectName: r.projectName })),
+    referrals: referrals.map(r => ({ 
+      id: r.id, 
+      email: r.members[0]?.bioUser?.email || null, 
+      projectName: r.projectName 
+    })),
   };
 } 

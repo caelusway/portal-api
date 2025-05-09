@@ -151,6 +151,12 @@ export const ProjectService = {
       include: {
         Discord: true,
         NFTs: true,
+        members: {
+          include: {
+            bioUser: true
+          }
+        },
+        Twitter: true,
       },
     });
   },
