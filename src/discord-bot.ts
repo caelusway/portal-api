@@ -1067,6 +1067,9 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
       }
     });
     
+    // Flag to track if a scientific profile was actually created
+    let scientificProfileCreated = false;
+    
     // Extract scientific profile URLs and save them individually
     if (scientificBackground) {
       // Split by newlines in case multiple URLs were provided
@@ -1106,6 +1109,7 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
               }
             });
             console.log(`[PROFILE] Created scientific profile record for platform: ${platform}`);
+            scientificProfileCreated = true;
           }
         }
       }
@@ -1143,6 +1147,7 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
                 }
               });
               console.log(`[PROFILE] Created paper record for platform: ${platform}`);
+              scientificProfileCreated = true;
             }
           }
         }
@@ -1152,6 +1157,70 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
           where: { id: member.id },
           data: { motivationToJoin: researchPapers }
         });
+      }
+    }
+    
+    // If any scientific profile was created, increment the verifiedScientistCount for the project
+    if (scientificProfileCreated) {
+      // Find the Discord server for this member
+      const discord = await prisma.discord.findFirst({
+        where: { serverId: guildId }
+      });
+      
+      if (discord) {
+        // Get the project associated with this Discord server
+        const project = await prisma.project.findUnique({
+          where: { id: discord.projectId }
+        });
+        
+        if (project) {
+          // Check if this is the first scientific profile for this Discord member
+          const existingProfiles = await prisma.scientificProfile.count({
+            where: { memberId: member.id }
+          });
+          
+          // Only increment if this is the first set of profiles (to avoid counting the same scientist multiple times)
+          if (existingProfiles <= 1) {
+            // Increment the verifiedScientistCount
+            await prisma.project.update({
+              where: { id: project.id },
+              data: { 
+                verifiedScientistCount: {
+                  increment: 1
+                }
+              } as any
+            });
+            
+            console.log(`[PROFILE] Incremented verified scientist count for project ${project.id}`);
+            
+            // Check if this update triggers a level-up to level 6
+            if (project.level === 5) {
+              // Check the updated count
+              const updatedProject = await prisma.project.findUnique({
+                where: { id: project.id },
+                include: {
+                  Discord: true,
+                  NFTs: true,
+                  members: {
+                    include: {
+                      bioUser: true
+                    }
+                  },
+                }
+              });
+              
+              // If the updated count is now at least 10, check for level-up
+              if (updatedProject && (updatedProject as any).verifiedScientistCount >= 10) {
+                console.log(`[PROFILE] Project ${project.id} now has ${(updatedProject as any).verifiedScientistCount} verified scientists, checking for level-up`);
+                
+                // If user is connected via WebSocket, perform level-up
+                if (activeConnections[project.id]) {
+                  await checkAndPerformLevelUp(updatedProject, activeConnections[project.id]);
+                }
+              }
+            }
+          }
+        }
       }
     }
     

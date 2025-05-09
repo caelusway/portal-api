@@ -8,6 +8,7 @@ import prisma, {
   DiscordService,
   NFTService,
 } from '../services/db.service';
+import TwitterService from '../services/twitter.service';
 import { extractDiscordInfo } from '../utils/helpers';
 import { mintIdeaNft, mintVisionNft } from '../nft-service';
 import { generateIdeaNFTImage, generateVisionNFTImage } from '../image-generation-service';
@@ -207,6 +208,110 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
             }
             break;
           }
+          case 'twitter_connect':
+            // Handle Twitter account connection
+            await handleTwitterConnect(ws, data.userId, {
+              twitterId: data.twitterId,
+              twitterUsername: data.twitterUsername
+            });
+            break;
+            
+          case 'verify_twitter_tweets':
+            // Handle verification of Twitter introductory tweets
+            await handleVerifyTwitterTweets(ws, data.userId);
+            break;
+
+          case 'submit_twitter_tweets':
+            // Handle submission of specific tweet URLs for verification
+            if (data.userId && data.tweetUrls && Array.isArray(data.tweetUrls)) {
+              await handleSubmitTwitterTweets(ws, data.userId, data.tweetUrls);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'Invalid tweet submission format. Required: userId, tweetUrls (array)',
+                })
+              );
+            }
+            break;
+          case 'get_verified_scientists':
+            // Fetch the count of verified scientists for the project
+            if (data.userId) {
+              await handleGetVerifiedScientists(ws, data.userId);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID is required',
+                })
+              );
+            }
+            break;
+          case 'verify_twitter_space':
+            // Verify a Twitter Space for the project
+            if (data.userId && data.spaceUrl) {
+              await handleVerifyTwitterSpace(ws, data.userId, data.spaceUrl);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID and Twitter Space URL are required',
+                })
+              );
+            }
+            break;
+          case 'get_twitter_space_status':
+            // Get the status of Twitter Space verification
+            if (data.userId) {
+              await handleGetTwitterSpaceStatus(ws, data.userId);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID is required',
+                })
+              );
+            }
+            break;
+          case 'verify_blogpost':
+            // Verify a blogpost URL for the project
+            if (data.userId && data.blogpostUrl) {
+              await handleVerifyBlogpost(ws, data.userId, data.blogpostUrl);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID and blogpost URL are required',
+                })
+              );
+            }
+            break;
+          case 'verify_twitter_thread':
+            // Verify a Twitter thread for the project
+            if (data.userId && data.threadUrl) {
+              await handleVerifyTwitterThread(ws, data.userId, data.threadUrl);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID and Twitter thread URL are required',
+                })
+              );
+            }
+            break;
+          case 'get_blogpost_status':
+            // Get blogpost verification status
+            if (data.userId) {
+              await handleGetBlogpostStatus(ws, data.userId);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID is required',
+                })
+              );
+            }
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }
@@ -869,6 +974,7 @@ async function sendCoreAgentGuidance(
       include: {
         NFTs: true,
         Discord: true,
+        Twitter: true,
       },
     });
 
@@ -973,6 +1079,7 @@ async function calculateUserProgress(project: any): Promise<any> {
  */
 function generateNextLevelRequirementsMessage(currentLevel: number, project: any): string {
   switch (currentLevel) {
+    /*
     case 1:
       return [
         `**I'm excited to help you set up your research community!** \nLet me guide you through the process:\n`,
@@ -990,11 +1097,13 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
         `- Reach out to colleagues, collaborators, and interested researchers\n`,
         `Would you like help creating your Discord server?`,
       ].join('\n');
+      */
 
     case 2:
       const currentMembers = project.Discord?.memberCount || 0;
       const membersNeeded = 4 - currentMembers;
       const botInstalled = project.Discord?.botAdded || false;
+      const userDiscordConnected = project.members?.[0]?.bioUser?.discordId ? true : false;
       
       // SCENARIO 1: No Discord entry at all - focus on step 1 only (creating server and sharing invite)
       if (!project.Discord) {
@@ -1006,7 +1115,8 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
           `- You can use this BIO template: https://discord.new/wbyrDkxwyhNp`,
           `- Once created, share your Discord invite link with me here`,
           `- Just paste your Discord invite link (it will look like discord.gg/123abc)\n`,
-          `**Important:** Share your Discord invite link first, then we'll proceed to the next step.`,
+          `**Optional Resource:** Check out our [Discord Basics Tutorial Video](https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1) for helpful tips on setting up an effective server. This is not required for level-up but highly recommended.\n`,
+          `**Important:** Share your Discord invite link first, then we'll proceed to the next steps.`,
         ].join('\n');
       }
       // SCENARIO 2: Discord connected but bot not installed - focus on step 2
@@ -1016,28 +1126,53 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
           `**Current Status:**\n`,
           `- Discord server connected ✅`,
           `- Verification bot installed ❌`,
+          `- Your personal Discord account connected ${userDiscordConnected ? '✅' : '❌'}`,
           `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
           `**Next Step: Install Verification Bot**\n`,
           `- I've sent you a link to install our verification bot in a separate message`,
           `- This bot is required to track your community metrics automatically`,
           `- Without the bot, we can't verify your progress toward level-ups\n`,
+          `**Optional Resource:** Our [Discord Basics Tutorial Video](https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1) includes tips for growing your community and managing your server. Not required for level-up but recommended!\n`,
           `After installing the bot, focus on inviting members to your server to reach at least 4 members.`,
           `Would you like suggestions for growing your community?`,
         ].join('\n');
       } 
-      // SCENARIO 3: Bot installed - focus on growing community
+      // SCENARIO 3: Bot installed but personal account not connected
+      else if (!userDiscordConnected) {
+        return [
+          `**Great progress on setting up your community!** \n`,
+          `**Current Status:**\n`,
+          `- Discord server connected ✅`, 
+          `- Verification bot installed ✅`,
+          `- Your personal Discord account connected ❌`,
+          `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
+          `**Next Step: Connect Your Personal Discord Account**\n`,
+          `- Go to http://localhost:3000/settings?tab=connections`,
+          `- Click "Connect" next to Discord`,
+          `- This connection is required to receive DM notifications when new scientists join`,
+          `- The DM system is how scientists will verify their credentials\n`,
+          `**Final Step: Grow Your Community**\n`,
+          `- Invite researchers and collaborators to join your server`,
+          `- Reach the milestone of 4 members to advance to Level 3\n`,
+          `**Optional Resource:** Check out our [Discord Basics Tutorial Video](https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1) for advanced community growth strategies.\n`,
+          `Would you like suggestions for growing your community or tracking your progress?`,
+        ].join('\n');
+      }
+      // SCENARIO 4: Everything set up, just need to grow community
       else {
         return [
           `**Great progress on setting up your community!** \n`,
           `**Current Status:**\n`,
           `- Discord server connected ✅`, 
           `- Verification bot installed ✅`,
+          `- Your personal Discord account connected ✅`,
           `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
           `**Focus on Growing Your Community:**\n`,
           `- Invite researchers and collaborators to join your server`,
           `- Share interesting scientific content to attract members`,
           `- Host virtual events or discussions`,
           `- Reach the milestone of 4 members to advance to Level 3\n`,
+          `**Optional Resource:** Check out our [Discord Basics Tutorial Video](https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1) for advanced community growth strategies. This is not required for level-up but may help you succeed.\n`,
           `Would you like suggestions for growing your community or tracking your progress?`,
         ].join('\n');
       }
@@ -1059,22 +1194,118 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
         `- Encourage rich discussion on research topics`,
         `- Ask thoughtful, open-ended questions`,
         `- The bot tracks and filters quality messages\n`,
+        `**Optional Resource:** Our [Discord Basics Tutorial Video](https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1) includes advanced tips for managing scientific communities.\n`,
         `Would you like help with outreach or boosting engagement?`,
       ].join('\n');
 
     case 4:
+      // Get Twitter connection status
+      const twitterConnected = project.Twitter?.connected || false;
+      const introTweetsCount = project.Twitter?.introTweetsCount || 0;
+      const tweetsNeeded = Math.max(0, 3 - introTweetsCount);
+      
+      // If Twitter not connected
+      if (!twitterConnected) {
+        return [
+          `**Congratulations on reaching Level 4!** \nTime to establish your BioDAO's social presence.\n`,
+          `**Next Step: Connect Your Twitter Account**\n`,
+          `1. Go to http://localhost:3000/settings?tab=connections`,
+          `2. Click "Connect" next to Twitter`,
+          `3. Authorize the connection with your BioDAO's Twitter account\n`,
+          `After connecting, you'll need to publish 3 introductory tweets about your DAO and its mission.\n`,
+          `Would you like guidance on what to include in your tweets?`,
+        ].join('\n');
+      }
+      // If Twitter connected but not enough tweets
+      else if (introTweetsCount < 3) {
+        return [
+          `**You're making great progress!** \nYour Twitter account is connected successfully.\n`,
+          `**Current Status:**\n`,
+          `- Twitter account connected ✅`,
+          `- Introductory tweets published: ${introTweetsCount}/3 (need ${tweetsNeeded} more)\n`,
+          `**Next Step: Publish Introductory Tweets**\n`,
+          `Your tweets should focus on:\n`,
+          `1. Your BioDAO's core mission and scientific focus`,
+          `2. The specific problems your community aims to solve`,
+          `3. An invitation for other researchers to join your community\n`,
+          `Use hashtags like #DeSci, #BioDAO, and your specific research field for visibility.\n`,
+          `After publishing tweets, Please share the URLs with me here.`,
+        ].join('\n');
+      }
+      // If Twitter connected and enough tweets (shouldn't happen, should level up)
+      else {
+        return [
+          `**You've completed all Level 4 requirements!** \nYou should be advancing to Level 5 shortly.\n`,
+          `**Current Status:**\n`,
+          `- Twitter account connected ✅`,
+          `- Introductory tweets published: ${introTweetsCount}/3 ✅\n`,
+          `Your BioDAO has established both a scientific community and social presence. Great work!`,
+        ].join('\n');
+      }
+
+    case 5:
+      // Get Twitter Space and scientist stats
+      const scientistCount = (project as any).verifiedScientistCount || 0;
+      const hasTwitterSpace = project.Twitter?.twitterSpaceUrl ? true : false;
+      const scientistsNeeded = Math.max(0, 10 - scientistCount);
+
       return [
-        `🎉 **Congratulations on reaching Level 4!**  \nThis is a huge milestone for your BioDAO.\n`,
-        `The Bio team will reach out soon to discuss:\n`,
-        `- Your research goals and vision`,
-        `- Funding opportunities`,
-        `- Advanced resources and support`,
-        `- Strategic guidance for growth\n`,
-        `**Prepare for your call by:**`,
-        `1. Refining your research roadmap`,
-        `2. Identifying key challenges`,
-        `3. Listing questions for the Bio team\n`,
-        `Meanwhile, enjoy full access to all platform features. Anything you'd like to focus on now?`,
+        `**You're at Level 5: Social Presence** \nNow it's time to build your scientific community.\n`,
+        `**Current Status:**\n`,
+        `- Discord community established ✅ (${project.Discord?.memberCount || 0} members)`,
+        `- Twitter presence established ✅`,
+        `- Verified scientists: ${scientistCount}/10 ${scientistCount >= 10 ? '✅' : '❌'}`,
+        `- Twitter Space hosted: ${hasTwitterSpace ? '✅' : '❌'}\n`,
+        `**Next Steps:**\n`,
+        `1. ${scientistCount >= 10 ? '✅' : '❌'} Grow your community to include at least 10 verified scientists or patients${
+          scientistsNeeded > 0 ? ` (need ${scientistsNeeded} more)` : ''
+        }`,
+        `2. ${hasTwitterSpace ? '✅' : '❌'} Host a public Twitter Space to engage your audience${
+          !hasTwitterSpace ? ' (share the URL with me after hosting)' : ''
+        }\n`,
+        `Scientists are verified when they join your Discord and share their scientific profiles through our bot's DM system. The bot will automatically prompt new members to share their credentials.\n\n`,
+        `Would you like specific guidance on either of these requirements?`,
+      ].join('\n');
+
+    case 6:
+      return [
+        `🎉 **Congratulations on reaching Level 6!**  \nYou've established a strong scientific community.\n`,
+        `**Your BioDAO's Current Status:**\n`,
+        `- Scientific NFTs minted ✅`,
+        `- Discord community established ✅ (${project.Discord?.memberCount || 0} members)`,
+        `- Scientific content shared ✅ (${project.Discord?.papersShared || 0} papers)`,
+        `- Active community discussions ✅ (${project.Discord?.messagesCount || 0} messages)`,
+        `- Social presence established ✅ (Twitter connected with intro tweets)`,
+        `- Scientific community ✅ (${(project as any).verifiedScientistCount || 0} verified scientists)`,
+        `- Community engagement ✅ (Hosted Twitter Space)\n`,
+        `**Next Steps for Level 7:**\n`,
+        `1. Write and publish a visionary blogpost about your DAO's future in 5-10 years`,
+        `2. Convert your blogpost into a Twitter thread and share it publicly\n`,
+        `This final level focuses on clearly articulating your long-term vision and expanding your public presence. Would you like guidance on writing your visionary blogpost?`,
+      ].join('\n');
+
+    case 7:
+      const hasBlogpost = (project.Twitter as any)?.blogpostUrl ? true : false;
+      const hasTwitterThread = (project.Twitter as any)?.twitterThreadUrl ? true : false;
+      
+      return [
+        `🎉 **Congratulations on completing all levels of the BioDAO onboarding process!**\n`,
+        `**Your BioDAO's Current Status:**\n`,
+        `- Scientific NFTs minted ✅`,
+        `- Discord community established ✅ (${project.Discord?.memberCount || 0} members)`,
+        `- Scientific content shared ✅ (${project.Discord?.papersShared || 0} papers)`,
+        `- Active community discussions ✅ (${project.Discord?.messagesCount || 0} messages)`,
+        `- Social presence established ✅ (Twitter connected with intro tweets)`,
+        `- Scientific community ✅ (${(project as any).verifiedScientistCount || 0} verified scientists)`,
+        `- Community engagement ✅ (Hosted Twitter Space)`,
+        `- Vision articulated ✅ (Published blogpost and Twitter thread)\n`,
+        `**Beyond Onboarding:**\n`,
+        `Your BioDAO is now fully established! You have completed all onboarding requirements. The Bio team will be in touch regarding next steps and opportunities within the ecosystem.\n\n`,
+        `**Some suggestions for continued growth:**\n`,
+        `1. Regularly update your community through Discord and Twitter`,
+        `2. Explore funding opportunities through grants and partnerships`,
+        `3. Establish regular Twitter Spaces or community calls`,
+        `4. Develop a roadmap for your scientific milestones`,
       ].join('\n');
 
     default:
@@ -1385,12 +1616,143 @@ async function handlePotentialActions(
       actions.push({ action: 'mint_vision_nft', success });
     }
 
+    // Check for tweet URLs if user is at level 4
+    if (project.level === 4) {
+      // Check if user message contains tweet URLs
+      const tweetUrls = extractTweetUrls(userMessage);
+      
+      if (tweetUrls.length > 0) {
+        console.log(`Found ${tweetUrls.length} tweet URLs in message: ${tweetUrls.join(', ')}`);
+        
+        // Process the tweet verification
+        const success = await handleTweetVerification(ws, userId, tweetUrls);
+        
+        if (success) {
+          actions.push({ action: 'verify_tweets', success: true });
+          console.log(`Tweet verification processed successfully for user ${userId}`);
+        } else {
+          console.log(`Tweet verification failed for user ${userId}`);
+        }
+      } 
+      // Check if user is explicitly asking to verify their tweets
+      else if (
+        userMessage.toLowerCase().includes('verify my tweets') ||
+        userMessage.toLowerCase().includes('check my tweets') ||
+        userMessage.toLowerCase().includes('verify tweets') ||
+        userMessage.toLowerCase().includes('submitted tweets') ||
+        userMessage.toLowerCase().includes('published tweets')
+      ) {
+        // Process general tweet verification (checks recent tweets)
+        try {
+          await handleVerifyTwitterTweets(ws, userId);
+          actions.push({ action: 'verify_recent_tweets', success: true });
+          console.log(`Recent tweet verification processed for user ${userId}`);
+        } catch (error) {
+          console.error('Error verifying recent tweets:', error);
+          actions.push({ action: 'verify_recent_tweets', success: false });
+        }
+      }
+    }
+
     // More potential actions can be added here in the future
 
     return actions;
   } catch (error) {
     console.error('Error processing potential actions:', error);
     return actions;
+  }
+}
+
+/**
+ * Extract tweet URLs from a message
+ * @param message User message
+ * @returns Array of tweet URLs found in the message
+ */
+function extractTweetUrls(message: string): string[] {
+  const tweetUrls: string[] = [];
+  
+  // Regular expressions to match Twitter URLs
+  const twitterRegex = /https?:\/\/(www\.)?(twitter|x)\.com\/[a-zA-Z0-9_]+\/status\/\d+/g;
+  
+  // Find all matches
+  const matches = message.match(twitterRegex);
+  
+  if (matches) {
+    // Filter out duplicates
+    const uniqueUrls = [...new Set(matches)];
+    tweetUrls.push(...uniqueUrls);
+  }
+  
+  return tweetUrls;
+}
+
+/**
+ * Handle tweet verification from chat messages
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param tweetUrls Array of tweet URLs to verify
+ * @returns Success status
+ */
+async function handleTweetVerification(
+  ws: WebSocket,
+  userId: string,
+  tweetUrls: string[]
+): Promise<boolean> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return false;
+    }
+
+    if (!tweetUrls || tweetUrls.length === 0) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'No tweet URLs found in your message',
+        })
+      );
+      return false;
+    }
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save chat message acknowledging tweet submissions
+    await saveChatMessage(
+      sessionId,
+      `I've detected ${tweetUrls.length} tweet URLs in your message. Verifying now...`,
+      true,
+      'tweets_detected',
+      true
+    );
+
+    // Update user with a status message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `I've detected ${tweetUrls.length} tweet URLs. Analyzing and verifying these tweets...`,
+        isFromAgent: true,
+      })
+    );
+
+    // Process the tweet verification using the TwitterService
+    await handleSubmitTwitterTweets(ws, userId, tweetUrls);
+    
+    return true;
+  } catch (error) {
+    console.error('Error verifying tweets:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify tweets',
+      })
+    );
+    return false;
   }
 }
 
@@ -1866,6 +2228,7 @@ async function checkLevelUpConditions(
         Discord: true,
         NFTs: true,
         members: { include: { bioUser: true } }, // Added this line
+        Twitter: true, // Include Twitter data for Level 5 checks
       },
     });
 
@@ -1875,7 +2238,7 @@ async function checkLevelUpConditions(
     }
 
     // Skip if user is already at max level
-    if (project.level >= 4) return;
+    if (project.level >= 6) return;
     
 
     // Level 2 to Level 3: Need 4+ Discord members and verified status
@@ -1989,9 +2352,11 @@ I'll help you track these metrics and provide strategies to achieve them.`;
 - **${discordStats.papersShared} scientific papers shared**
 - **${discordStats.messagesCount} messages** in your server
 
-You've advanced to **Level ${newLevel}** and now have access to the BioDAO sandbox!
+You've advanced to **Level ${newLevel}!**
 
-The Bio team will contact you via email shortly to schedule a call to discuss your next steps.`;
+To advance to Level 5, you need to establish your social presence:
+1. **Connect DAO Twitter account** via the settings page (http://localhost:3000/settings?tab=connections)
+2. **Publish 3 introductory tweets** about your DAO and its mission`;
 
       // Save level-up message to chat
       await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
@@ -2004,9 +2369,8 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
           newLevel: newLevel,
           message: levelUpMessage,
           nextLevelRequirements: [
-            'All requirements completed - congratulations!',
-            'The Bio team will contact you to schedule a call',
-            'You now have access to the full BioDAO sandbox',
+            'Connect your Twitter account',
+            'Publish 3 introductory tweets about your DAO',
           ],
         })
       );
@@ -2029,15 +2393,227 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
         try {
           // Send level up email
           await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
-
-          // Send sandbox email for final level
-          await sendSandboxEmail(project);
-
-          console.log(`Sent level ${newLevel} and sandbox emails to ${project.members[0].bioUser.email}`);
+          console.log(`Sent level ${newLevel} email to ${project.members[0].bioUser.email}`);
         } catch (error) {
           console.error(`Error sending emails to ${project.members[0].bioUser.email}:`, error);
         }
       }
+    }
+    // Level 4 to Level 5: Twitter connected and 3+ intro tweets
+    else if (
+      currentLevel === 4 &&
+      project.Twitter &&
+      project.Twitter.connected &&
+      project.Twitter.introTweetsCount >= 3
+    ) {
+      // Define the new level
+      const newLevel = 5;
+
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
+
+      // Update to level 5
+      await prisma.project.update({
+        where: { id: userId },
+        data: { level: newLevel },
+      });
+
+      console.log(`User ${userId} automatically progressed to Level ${newLevel}`);
+
+      // Get session for chat history
+      const sessionId = await getOrCreateChatSession(userId);
+
+      // Create level-up message
+      const levelUpMessage = `## Level ${newLevel} Unlocked! 🎉
+
+**Congratulations!** You've completed all levels of the BioDAO onboarding process by establishing your social presence with:
+- **Twitter account connected**
+- **${project.Twitter.introTweetsCount} introductory tweets published**
+
+You've reached the highest level of the BioDAO onboarding journey! Your community now has:
+- A strong Discord community with ${discordStats.memberCount} members
+- Scientific credibility with ${discordStats.papersShared} papers shared
+- Active discussion with ${discordStats.messagesCount} messages
+- Social media presence with connected Twitter
+
+Next steps:
+1. Continue growing your community on Discord and Twitter
+2. Explore funding opportunities through the BioDAO ecosystem
+3. Develop partnerships with other DeSci projects
+4. Check out the dashboard for additional resources`;
+
+      // Save level-up message to chat
+      await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
+
+      // Send level-up message to WebSocket
+      ws.send(
+        JSON.stringify({
+          type: 'level_up',
+          previousLevel: currentLevel,
+          newLevel: newLevel,
+          message: levelUpMessage,
+          nextLevelRequirements: [
+            'All requirements completed - congratulations!',
+            'You have reached the highest level in the BioDAO onboarding process',
+          ],
+        })
+      );
+
+      // Also send as a regular message for clients that don't handle level_up events
+      ws.send(
+        JSON.stringify({
+          type: 'message',
+          content: levelUpMessage,
+          isFromAgent: true,
+          action: 'LEVEL_UP',
+        })
+      );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
+
+      // Send email notifications
+      if (project.members[0].bioUser.email) {
+        try {
+          // Send level up email
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
+          console.log(`Sent final level ${newLevel} email to ${project.members[0].bioUser.email}`);
+        } catch (error) {
+          console.error(`Error sending emails to ${project.members[0].bioUser.email}:`, error);
+        }
+      }
+    }
+    // Level 5 to Level 6: Verified scientists count
+    else if (
+      currentLevel === 5 &&
+      (project as any).verifiedScientistCount >= 10
+    ) {
+      // Define the new level
+      const newLevel = 6;
+
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(userId, newLevel)) {
+        console.log(`Skipping duplicate level ${newLevel} notification for user ${userId} (sent recently)`);
+        return;
+      }
+
+      // Update to level 6
+      await prisma.project.update({
+        where: { id: userId },
+        data: { level: newLevel },
+      });
+
+      console.log(`User ${userId} automatically progressed to Level ${newLevel}`);
+
+      // Get session for chat history
+      const sessionId = await getOrCreateChatSession(userId);
+
+      // Create level-up message
+      const levelUpMessage = `🎉 **Congratulations on reaching Level 6!**  \nYou've successfully built a community with 10+ verified scientists or patients.\n\nThe Bio team will reach out to discuss next steps for your scientific community.`;
+
+      // Save level-up message to chat
+      await saveChatMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
+
+      // Send level-up message to WebSocket
+      ws.send(
+        JSON.stringify({
+          type: 'level_up',
+          previousLevel: currentLevel,
+          newLevel: newLevel,
+          message: levelUpMessage,
+          nextLevelRequirements: [
+            'All requirements completed - congratulations!',
+            'You have reached the highest level in the BioDAO onboarding process',
+          ],
+        })
+      );
+
+      // Also send as a regular message for clients that don't handle level_up events
+      ws.send(
+        JSON.stringify({
+          type: 'message',
+          content: levelUpMessage,
+          isFromAgent: true,
+          action: 'LEVEL_UP',
+        })
+      );
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(userId, newLevel);
+
+      // Send email notifications
+      if (project.members[0].bioUser.email) {
+        try {
+          // Send level up email
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
+          console.log(`Sent final level ${newLevel} email to ${project.members[0].bioUser.email}`);
+        } catch (error) {
+          console.error(`Error sending emails to ${project.members[0].bioUser.email}:`, error);
+        }
+      }
+    }
+    // Level 6 to Level 7: Blogpost and Twitter thread
+    else if (
+      currentLevel === 6 &&
+      (project.Twitter as any).blogpostUrl &&
+      (project.Twitter as any).twitterThreadUrl
+    ) {
+      // Check if we've recently sent this level-up notification
+      if (wasLevelUpRecentlySent(project.id, 7)) {
+        console.log(`Skipping duplicate level 7 notification for user ${project.id} (sent recently)`);
+        return;
+      }
+      
+      const newLevel = 7;
+      const shouldLevelUp = true;
+      const levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. You have now completed all levels of the BioDAO onboarding process!\n\nThe Bio team will reach out to discuss next steps and opportunities for your thriving scientific community.`;
+      
+      // Code to perform the level up would go here, similar to other level transitions
+      // Update the level in the database
+      await prisma.project.update({
+        where: { id: project.id },
+        data: { level: newLevel },
+      });
+
+      // Get or create chat session for this user
+      const sessionId = await ChatSessionService.getOrCreateForUser(project.id);
+      
+      // Save the level up message to chat history
+      await ChatMessageService.saveMessage(sessionId, levelUpMessage, true, 'LEVEL_UP', true);
+
+      // Send a message about leveling up
+      if (ws) {
+        ws.send(
+          JSON.stringify({
+            type: 'message',
+            content: levelUpMessage,
+            isFromAgent: true,
+            action: 'level_up',
+          })
+        );
+        
+        // Also send the level_up event
+        ws.send(
+          JSON.stringify({
+            type: 'level_up',
+            previousLevel: currentLevel,
+            newLevel: newLevel,
+          })
+        );
+      }
+
+      // Record that we've sent this level-up notification
+      recordLevelUpSent(project.id, newLevel);
+    } else {
+      const missingReqs = [];
+      if (!(project.Twitter as any).blogpostUrl) missingReqs.push('visionary blogpost');
+      if (!(project.Twitter as any).twitterThreadUrl) missingReqs.push('Twitter thread');
+      console.log(
+        `Project ${project.id} doesn't meet level 7 requirements: ${missingReqs.join(', ')} not verified`
+      );
     }
   } catch (error) {
     console.error('Error checking level-up conditions:', error);
@@ -2087,7 +2663,14 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
       case 2:
         // Check level 2 to 3 conditions (Discord created with members)
         const discordInfo = await DiscordService.getByProjectId(project.id);
-        if (discordInfo && discordInfo.verified && discordInfo.memberCount && discordInfo.memberCount >= 4) {
+        const founderUser = project.members?.find((m: any) => m.role === 'founder')?.bioUser;
+        const discordConnected = founderUser?.discordId ? true : false;
+        
+        if (discordInfo && 
+            discordInfo.verified && 
+            discordInfo.memberCount && 
+            discordInfo.memberCount >= 4 &&
+            discordConnected) {
           // Check if we've recently sent this level-up notification
           if (wasLevelUpRecentlySent(project.id, 3)) {
             console.log(`Skipping duplicate level 3 notification for user ${project.id} (sent recently)`);
@@ -2096,7 +2679,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           
           newLevel = 3;
           shouldLevelUp = true;
-          levelUpMessage = `🎉 Congratulations! You've progressed to Level 3: Community Growth.\n\nYour next goals are:\n- Reach 10+ Discord members\n- Share 25+ scientific papers\n- Have 100+ messages in your Discord`;
+          levelUpMessage = `🎉 Congratulations! You've progressed to Level 3: Community Growth.\n\nYour next goals are:\n- Reach 5+ Discord members\n- Share 5+ scientific papers\n- Have 50+ messages in your Discord`;
         } else {
           const missingReqs = [];
           if (!discordInfo) missingReqs.push('Discord server not connected');
@@ -2105,6 +2688,8 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
             if (discordInfo.memberCount && discordInfo.memberCount < 4)
               missingReqs.push(`Need more members (${discordInfo.memberCount}/4)`);
           }
+          if (!discordConnected) missingReqs.push('Personal Discord account not connected');
+          
           console.log(
             `Project ${project.id} doesn't meet level 3 requirements: ${missingReqs.join(', ')}`
           );
@@ -2129,9 +2714,10 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           
           newLevel = 4;
           shouldLevelUp = true;
-          levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nThis is the final milestone in your BioDAO onboarding journey. The Bio team will reach out to you via email soon to schedule a call to discuss your next steps.`;
+          levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nYour next steps are:\n- Connect your Twitter account in settings [http://localhost:3000/settings]\n- Create 3 introductory tweets about your BioDAO`;
 
-          // Send sandbox email when reaching level 4 (final level)
+          
+          // Send sandbox email when reaching level 4
           try {
             // Get user email for notification
             if (project.email) {
@@ -2157,6 +2743,89 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           }
           console.log(
             `Project ${project.id} doesn't meet level 4 requirements: ${missingReqs.join(', ')}`
+          );
+        }
+        break;
+
+      case 4:
+        // Check level 4 to 5 conditions (Twitter connected with intro tweets)
+        const twitterData = await prisma.twitter.findUnique({
+          where: { projectId: project.id }
+        });
+        
+        if (twitterData && twitterData.connected && twitterData.introTweetsCount >= 3) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 5)) {
+            console.log(`Skipping duplicate level 5 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
+          newLevel = 5;
+          shouldLevelUp = true;
+          levelUpMessage = `🎉 Congratulations! You've reached Level 5: Social Presence.\n\nYour next goal is to grow your scientific community:\n- Recruit and verify at least 10 scientists or patients to your community \n- Host a Twitter Space`;
+        } else {
+          const missingReqs = [];
+          if (!twitterData) missingReqs.push('Twitter account not connected');
+          else {
+            if (!twitterData.connected) missingReqs.push('Twitter connection not verified');
+            if (twitterData.introTweetsCount < 3) 
+              missingReqs.push(`Need more intro tweets (${twitterData.introTweetsCount}/3)`);
+          }
+          console.log(
+            `Project ${project.id} doesn't meet level 5 requirements: ${missingReqs.join(', ')}`
+          );
+        }
+        break;
+        
+      case 5:
+        // Check level 5 to 6 conditions (Verified scientists count AND Twitter Space)
+        const hasTwitterSpace = (project.Twitter as any)?.twitterSpaceUrl ? true : false;
+        
+        if ((project as any).verifiedScientistCount >= 10 && hasTwitterSpace) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 6)) {
+            console.log(`Skipping duplicate level 6 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
+          newLevel = 6;
+          shouldLevelUp = true;
+          levelUpMessage = `🎉 Congratulations! You've reached Level 6: Scientific Community.\n\nYou've successfully built a community with 10+ verified scientists or patients and hosted a Twitter Space to engage your audience. This is a significant achievement for your BioDAO! \n\nThe Bio team will reach out to discuss next steps for your scientific community.`;
+        } else {
+          const missingReqs = [];
+          if ((project as any).verifiedScientistCount < 10) {
+            missingReqs.push(`verified scientists (${(project as any).verifiedScientistCount}/10)`);
+          }
+          if (!hasTwitterSpace) {
+            missingReqs.push('Twitter Space not hosted');
+          }
+          console.log(
+            `Project ${project.id} doesn't meet level 6 requirements: ${missingReqs.join(', ')}`
+          );
+        }
+        break;
+
+      case 6:
+        // Check level 6 to 7 conditions (blogpost and Twitter thread)
+        const hasBlogpost = (project.Twitter as any)?.blogpostUrl ? true : false;
+        const hasTwitterThread = (project.Twitter as any)?.twitterThreadUrl ? true : false;
+        
+        if (hasBlogpost && hasTwitterThread) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 7)) {
+            console.log(`Skipping duplicate level 7 notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
+          newLevel = 7;
+          shouldLevelUp = true;
+          levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. You have now completed all levels of the BioDAO onboarding process!\n\nThe Bio team will reach out to discuss next steps and opportunities for your thriving scientific community.`;
+        } else {
+          const missingReqs = [];
+          if (!hasBlogpost) missingReqs.push('visionary blogpost');
+          if (!hasTwitterThread) missingReqs.push('Twitter thread');
+          console.log(
+            `Project ${project.id} doesn't meet level 7 requirements: ${missingReqs.join(', ')} not verified`
           );
         }
         break;
@@ -2745,6 +3414,840 @@ function recordLevelUpSent(userId: string, newLevel: number): void {
   userLevelUps.set(newLevel, Date.now());
 }
 
+/**
+ * Handle Twitter account connection
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param twitterData Twitter account data
+ */
+async function handleTwitterConnect(
+  ws: WebSocket,
+  userId: string,
+  twitterData: { twitterId: string; twitterUsername: string }
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!twitterData.twitterId || !twitterData.twitterUsername) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter ID and username are required',
+        })
+      );
+      return;
+    }
+
+    // Connect Twitter account
+    const updatedTwitterData = await TwitterService.connectAccount(
+      userId,
+      twitterData.twitterId,
+      twitterData.twitterUsername
+    );
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save chat message about Twitter connection
+    await saveChatMessage(
+      sessionId,
+      `Twitter account @${twitterData.twitterUsername} connected successfully`,
+      true,
+      'twitter_connected',
+      true
+    );
+
+    // Send success message
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_connected',
+        twitter: updatedTwitterData,
+        message: `Twitter account @${twitterData.twitterUsername} connected successfully`
+      })
+    );
+
+    // Send as regular message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Twitter Account Connected! 🎉\n\nYour Twitter account **@${twitterData.twitterUsername}** has been connected successfully to your BioDAO.\n\n**Next Step:**\nPublish 3 introductory tweets about your DAO and its mission. These should focus on:\n1. Your core scientific mission\n2. The problems your community aims to solve\n3. Inviting other researchers to join\n\nInclude hashtags like #DeSci, #BioDAO, and your research field to increase visibility.`,
+        isFromAgent: true,
+        action: 'twitter_connected'
+      })
+    );
+
+    // Check for level-up conditions
+    const project = await ProjectService.getById(userId);
+    if (project) {
+      await checkAndPerformLevelUp(project, ws);
+    }
+
+  } catch (error) {
+    console.error('Error connecting Twitter account:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to connect Twitter account',
+      })
+    );
+  }
+}
+
+/**
+ * Handle verification of Twitter introductory tweets
+ * @param ws WebSocket connection
+ * @param userId User ID
+ */
+async function handleVerifyTwitterTweets(
+  ws: WebSocket,
+  userId: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    // Verify tweets
+    const tweetCount = await TwitterService.verifyIntroTweets(userId);
+    
+    // Get updated Twitter data
+    const twitterData = await TwitterService.getByProjectId(userId);
+    
+    if (!twitterData) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter account not connected',
+        })
+      );
+      return;
+    }
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save chat message about tweet verification
+    let verificationMessage = '';
+    
+    if (tweetCount >= 3) {
+      verificationMessage = `Verified ${tweetCount} introductory tweets about your DAO! You've completed this requirement for Level 5.`;
+      
+      await saveChatMessage(
+        sessionId,
+        verificationMessage,
+        true,
+        'twitter_tweets_verified',
+        true
+      );
+    } else {
+      verificationMessage = `Found ${tweetCount}/3 introductory tweets about your DAO. You need ${3 - tweetCount} more tweets to complete this requirement.`;
+      
+      await saveChatMessage(
+        sessionId,
+        verificationMessage,
+        true,
+        'twitter_tweets_partial',
+        true
+      );
+    }
+
+    // Send success message
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_tweets_verified',
+        tweetCount,
+        verified: tweetCount >= 3,
+        twitter: twitterData,
+        message: verificationMessage
+      })
+    );
+
+    // Send as regular message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Twitter Verification Update\n\n${verificationMessage}`,
+        isFromAgent: true,
+        action: tweetCount >= 3 ? 'twitter_tweets_verified' : 'twitter_tweets_partial'
+      })
+    );
+
+    // If tweets are verified, check for level-up conditions
+    if (tweetCount >= 3) {
+      const project = await ProjectService.getById(userId);
+      if (project) {
+        await checkAndPerformLevelUp(project, ws);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error verifying Twitter tweets:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify Twitter tweets',
+      })
+    );
+  }
+}
+
+/**
+ * Handle submission of specific Twitter tweets for verification
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param tweetUrls Array of tweet URLs to verify
+ */
+async function handleSubmitTwitterTweets(
+  ws: WebSocket,
+  userId: string,
+  tweetUrls: string[]
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!tweetUrls || !Array.isArray(tweetUrls) || tweetUrls.length === 0) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Please provide at least one tweet URL',
+        })
+      );
+      return;
+    }
+
+    // Verify the submitted tweets
+    const result = await TwitterService.verifySubmittedTweets(userId, tweetUrls);
+    
+    if (!result.success) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: result.error || 'Failed to verify tweets',
+        })
+      );
+      return;
+    }
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Prepare appropriate message based on verification result
+    let verificationMessage = '';
+    let messageAction = '';
+    const totalVerified = result.tweetCount;
+    const newlyVerified = result.verifiedInThisRequest;
+    
+    if (totalVerified >= 3) {
+      // All requirements met
+      verificationMessage = `Great! I've verified ${newlyVerified} new tweet${newlyVerified !== 1 ? 's' : ''} about your DAO. You now have ${totalVerified}/3 verified tweets. You've completed this requirement for Level 5! 🎉`;
+      messageAction = 'twitter_tweets_verified';
+    } else {
+      // Still need more tweets
+      verificationMessage = `I've verified ${newlyVerified} new tweet${newlyVerified !== 1 ? 's' : ''} about your DAO. You now have ${totalVerified}/3 verified tweets. You need ${3 - totalVerified} more to complete this requirement.`;
+      messageAction = 'twitter_tweets_partial';
+    }
+    
+    // Save chat message about tweet verification
+    await saveChatMessage(
+      sessionId,
+      verificationMessage,
+      true,
+      messageAction,
+      true
+    );
+
+    // Send success message
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_tweets_verified',
+        tweetCount: totalVerified,
+        newlyVerified: newlyVerified,
+        verified: totalVerified >= 3,
+        twitter: result.twitterData,
+        message: verificationMessage
+      })
+    );
+
+    // Send as regular message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Twitter Verification Update\n\n${verificationMessage}${newlyVerified === 0 ? '\n\nNote: The tweets you submitted either weren\'t from your connected Twitter account or didn\'t contain relevant keywords about your BioDAO.' : ''}`,
+        isFromAgent: true,
+        action: messageAction
+      })
+    );
+
+    // If tweets are verified, check for level-up conditions
+    if (totalVerified >= 3) {
+      const project = await ProjectService.getById(userId);
+      if (project) {
+        await checkAndPerformLevelUp(project, ws);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error verifying submitted tweets:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify submitted tweets',
+      })
+    );
+  }
+}
+
+/**
+ * Get the count of verified scientists for a project
+ * @param ws WebSocket connection
+ * @param userId User ID
+ */
+async function handleGetVerifiedScientists(
+  ws: WebSocket,
+  userId: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    // Get the project with verified scientist count
+    const project = await prisma.project.findUnique({
+      where: { id: userId }
+    });
+
+    if (!project) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Project not found',
+        })
+      );
+      return;
+    }
+
+    const discord = await prisma.discord.findFirst({
+      where: { projectId: userId }
+    });
+
+    // Using type assertion to ensure TypeScript recognizes the field
+    const scientistCount = (project as any).verifiedScientistCount || 0;
+
+    // Send the verified scientists count
+    ws.send(
+      JSON.stringify({
+        type: 'verified_scientists',
+        count: scientistCount,
+        totalNeeded: 10, // Level 6 requirement
+        progress: Math.min(100, Math.round((scientistCount / 10) * 100)),
+        memberCount: discord?.memberCount || 0,
+      })
+    );
+  } catch (error) {
+    console.error('Error fetching verified scientists:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to fetch verified scientists count',
+      })
+    );
+  }
+}
+
+/**
+ * Handle verification of a Twitter Space URL
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param spaceUrl Twitter Space URL to verify
+ */
+async function handleVerifyTwitterSpace(
+  ws: WebSocket,
+  userId: string,
+  spaceUrl: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!spaceUrl) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter Space URL is required',
+        })
+      );
+      return;
+    }
+
+    // Validate URL format
+    if (!spaceUrl.includes('twitter.com/i/spaces/') && !spaceUrl.includes('x.com/i/spaces/')) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Invalid Twitter Space URL format. It should contain "twitter.com/i/spaces/" or "x.com/i/spaces/"',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    if (!twitterRecord) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter account not connected. Please connect your Twitter account first.',
+        })
+      );
+      return;
+    }
+
+    // Update the Twitter record with space URL and date
+    await prisma.twitter.update({
+      where: { id: twitterRecord.id },
+      data: {
+        twitterSpaceUrl: spaceUrl,
+        twitterSpaceDate: new Date(),
+      } as any // Use type assertion for the custom fields
+    });
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save verification message to chat
+    const verificationMessage = `Twitter Space successfully verified! URL: ${spaceUrl}`;
+    await saveChatMessage(sessionId, verificationMessage, true, 'TWITTER_SPACE_VERIFIED', true);
+
+    // Get the updated Twitter record
+    const updatedTwitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    // Send success response
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_space_verified',
+        success: true,
+        twitterSpace: {
+          url: (updatedTwitterRecord as any).twitterSpaceUrl,
+          date: (updatedTwitterRecord as any).twitterSpaceDate,
+        },
+        message: verificationMessage
+      })
+    );
+
+    // Also send as a chat message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Twitter Space Verified! 🎉\n\nYour Twitter Space has been successfully verified. This completes one of your Level 6 requirements.\n\nTwitter Space URL: ${spaceUrl}\nVerified on: ${new Date().toLocaleDateString()}`,
+        isFromAgent: true,
+        action: 'TWITTER_SPACE_VERIFIED'
+      })
+    );
+
+    // Check if user now meets all Level 6 requirements and should level up
+    const project = await ProjectService.getById(userId);
+    if (project) {
+      await checkAndPerformLevelUp(project, ws);
+    }
+
+  } catch (error) {
+    console.error('Error verifying Twitter Space:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify Twitter Space',
+      })
+    );
+  }
+}
+
+/**
+ * Get the status of Twitter Space verification for a project
+ * @param ws WebSocket connection
+ * @param userId User ID
+ */
+async function handleGetTwitterSpaceStatus(
+  ws: WebSocket,
+  userId: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    // Check if Twitter Space has been verified
+    const isVerified = (twitterRecord as any)?.twitterSpaceUrl ? true : false;
+
+    // Send the status
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_space_status',
+        verified: isVerified,
+        twitterSpace: isVerified ? {
+          url: (twitterRecord as any)?.twitterSpaceUrl,
+          date: (twitterRecord as any)?.twitterSpaceDate,
+        } : null
+      })
+    );
+  } catch (error) {
+    console.error('Error getting Twitter Space status:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to get Twitter Space status',
+      })
+    );
+  }
+}
+
+/**
+ * Handle verification of a blogpost URL
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param blogpostUrl Blogpost URL to verify
+ */
+async function handleVerifyBlogpost(
+  ws: WebSocket,
+  userId: string,
+  blogpostUrl: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!blogpostUrl) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Blogpost URL is required',
+        })
+      );
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(blogpostUrl);
+    } catch (e) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Invalid URL format',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    if (!twitterRecord) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter account not connected. Please connect your Twitter account first.',
+        })
+      );
+      return;
+    }
+
+    // Update the Twitter record with blogpost URL
+    await prisma.twitter.update({
+      where: { id: twitterRecord.id },
+      data: {
+        blogpostUrl: blogpostUrl,
+        blogpostDate: new Date(),
+      } as any
+    });
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save verification message to chat
+    const verificationMessage = `Visionary blogpost successfully verified! URL: ${blogpostUrl}`;
+    await saveChatMessage(sessionId, verificationMessage, true, 'BLOGPOST_VERIFIED', true);
+
+    // Send success response
+    ws.send(
+      JSON.stringify({
+        type: 'blogpost_verified',
+        success: true,
+        blogpost: {
+          url: blogpostUrl,
+          date: new Date(),
+        },
+        message: verificationMessage
+      })
+    );
+
+    // Also send as a chat message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Visionary Blogpost Verified! 🎉\n\nYour blogpost about your BioDAO's future vision has been successfully verified. This completes one of your Level 7 requirements.\n\nBlogpost URL: ${blogpostUrl}\nVerified on: ${new Date().toLocaleDateString()}\n\nNext, you'll need to share this as a Twitter thread to complete Level 7. Would you like guidance on creating an effective thread based on your blogpost?`,
+        isFromAgent: true,
+        action: 'BLOGPOST_VERIFIED'
+      })
+    );
+
+    // Check if user now meets all Level 7 requirements and should level up
+    const project = await ProjectService.getById(userId);
+    if (project) {
+      await checkAndPerformLevelUp(project, ws);
+    }
+
+  } catch (error) {
+    console.error('Error verifying blogpost:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify blogpost',
+      })
+    );
+  }
+}
+
+/**
+ * Handle verification of a Twitter thread URL
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param threadUrl Twitter thread URL to verify
+ */
+async function handleVerifyTwitterThread(
+  ws: WebSocket,
+  userId: string,
+  threadUrl: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!threadUrl) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter thread URL is required',
+        })
+      );
+      return;
+    }
+
+    // Validate URL format (either twitter.com or x.com)
+    if (!threadUrl.includes('twitter.com/') && !threadUrl.includes('x.com/')) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Invalid Twitter URL format. It should contain "twitter.com/" or "x.com/"',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    if (!twitterRecord) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter account not connected. Please connect your Twitter account first.',
+        })
+      );
+      return;
+    }
+
+    // Check if blogpost was verified first
+    if (!(twitterRecord as any).blogpostUrl) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Please verify your visionary blogpost first before verifying your Twitter thread.',
+        })
+      );
+      return;
+    }
+
+    // Update the Twitter record with thread URL
+    await prisma.twitter.update({
+      where: { id: twitterRecord.id },
+      data: {
+        twitterThreadUrl: threadUrl,
+        twitterThreadDate: new Date(),
+      } as any
+    });
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save verification message to chat
+    const verificationMessage = `Twitter thread successfully verified! URL: ${threadUrl}`;
+    await saveChatMessage(sessionId, verificationMessage, true, 'TWITTER_THREAD_VERIFIED', true);
+
+    // Send success response
+    ws.send(
+      JSON.stringify({
+        type: 'twitter_thread_verified',
+        success: true,
+        twitterThread: {
+          url: threadUrl,
+          date: new Date(),
+        },
+        message: verificationMessage
+      })
+    );
+
+    // Also send as a chat message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Twitter Thread Verified! 🎉\n\nYour Twitter thread sharing your BioDAO's vision has been successfully verified. Congratulations! You have now completed all Level 7 requirements.\n\nTwitter Thread URL: ${threadUrl}\nVerified on: ${new Date().toLocaleDateString()}`,
+        isFromAgent: true,
+        action: 'TWITTER_THREAD_VERIFIED'
+      })
+    );
+
+    // Check if user now meets all Level 7 requirements and should level up
+    const project = await ProjectService.getById(userId);
+    if (project) {
+      await checkAndPerformLevelUp(project, ws);
+    }
+
+  } catch (error) {
+    console.error('Error verifying Twitter thread:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify Twitter thread',
+      })
+    );
+  }
+}
+
+/**
+ * Get the status of blogpost and Twitter thread verification
+ * @param ws WebSocket connection
+ * @param userId User ID
+ */
+async function handleGetBlogpostStatus(
+  ws: WebSocket,
+  userId: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    // Check verification status
+    const blogpostVerified = (twitterRecord as any)?.blogpostUrl ? true : false;
+    const threadVerified = (twitterRecord as any)?.twitterThreadUrl ? true : false;
+
+    // Send the status
+    ws.send(
+      JSON.stringify({
+        type: 'blogpost_status',
+        blogpostVerified: blogpostVerified,
+        threadVerified: threadVerified,
+        blogpost: blogpostVerified ? {
+          url: (twitterRecord as any)?.blogpostUrl,
+          date: (twitterRecord as any)?.blogpostDate,
+        } : null,
+        twitterThread: threadVerified ? {
+          url: (twitterRecord as any)?.twitterThreadUrl,
+          date: (twitterRecord as any)?.twitterThreadDate,
+        } : null
+      })
+    );
+  } catch (error) {
+    console.error('Error getting blogpost status:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to get blogpost status',
+      })
+    );
+  }
+}
+
 export {
   initWebSocketServer,
   activeConnections,
@@ -2752,4 +4255,6 @@ export {
   handleGuildCreate,
   checkAndPerformLevelUp,
   checkAndUpdateUserLevel,
+  handleVerifyTwitterSpace,
+  handleGetTwitterSpaceStatus,
 };

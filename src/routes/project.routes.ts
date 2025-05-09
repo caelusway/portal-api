@@ -285,6 +285,63 @@ router.get('/:projectId/discord', async (req: any, res: any) => {
   }
 });
 
+/**
+ * PUT /api/projects/:projectId/twitter
+ * Update Twitter information for a project
+ */
+router.put('/:projectId/twitter', async (req: any, res: any) => {
+  try {
+    const { projectId } = req.params;
+    const twitterData = req.body;
+    const { userId } = req.body;
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    // Verify the project exists
+    const project = await ProjectService.getById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Find existing Twitter record or create a new one
+    let twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId },
+    });
+
+    if (twitterRecord) {
+      // Update existing Twitter record
+      twitterRecord = await prisma.twitter.update({
+        where: { id: twitterRecord.id },
+        data: {
+          ...twitterData,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // Create new Twitter record
+      twitterRecord = await prisma.twitter.create({
+        data: {
+          projectId,
+          ...twitterData,
+        },
+      });
+    }
+
+    // After updating Twitter info, check for possible level-up
+    if (project.level === 4 && twitterRecord.connected && twitterRecord.introTweetsCount >= 3) {
+      // Update project to level 5 if all requirements are met
+      await ProjectService.update(projectId, { level: 5 });
+    }
+
+    return res.json(twitterRecord);
+  } catch (error) {
+    console.error('Error updating Twitter info:', error);
+    return res.status(500).json({ error: 'Failed to update Twitter info' });
+  }
+});
+
 // Get project by wallet address
 router.get('/wallet/:wallet', async (req: any, res: any) => {
   try {

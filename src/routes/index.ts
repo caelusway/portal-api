@@ -7,6 +7,7 @@ import nftRoutes from './nft.routes';
 import referralRoutes from './referral';
 import inviteRoutes from './invite.routes';
 import userRoutes from './user.routes';
+import twitterRoutes from './twitter.routes';
 
 const router = express.Router();
 
@@ -24,5 +25,6 @@ router.use('/nfts', nftRoutes);
 router.use('/referral', referralRoutes);
 router.use('/invites', inviteRoutes);
 router.use('/users', userRoutes);
+router.use('/twitter', twitterRoutes);
 
 export default router;

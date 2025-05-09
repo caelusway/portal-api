@@ -66,6 +66,7 @@ model Project {
   referredById         String?
   referralSource       String?
   projectLinks         String?
+  verifiedScientistCount Int            @default(0) // Track verified scientists for Level 6
   ChatSessions         ChatSession[]
   Discord              Discord?
   NFTs                 NFT[]
@@ -73,6 +74,7 @@ model Project {
   invites              ProjectInvite[]
   referredBy           Project?         @relation("Referrals", fields: [referredById], references: [id])
   referrals            Project[]        @relation("Referrals")
+  Twitter              Twitter?         // Add relation to Twitter model
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 }
@@ -204,4 +206,26 @@ model ProjectInvite {
   status        String    @default("pending") // "pending", "accepted", "expired", "revoked"
   expiresAt     DateTime  // Set an expiry time for the token
   createdAt     DateTime  @default(now())
+}
+
+// Add a Twitter model to track user's Twitter account connection
+model Twitter {
+  id                String   @id @default(uuid())
+  projectId         String   @unique // One-to-one relation with Project
+  connected         Boolean  @default(false)
+  twitterUsername   String?  
+  twitterId         String?
+  introTweetsCount  Int      @default(0)
+  tweetIds          String?  // Comma-separated list of tweet IDs
+  twitterSpaceUrl   String?  // URL to Twitter Space for Level 6
+  twitterSpaceDate  DateTime? // Date when Twitter Space was hosted
+  blogpostUrl       String?  // URL to visionary blogpost for Level 7
+  blogpostDate      DateTime? // Date when blogpost was published
+  twitterThreadUrl  String?  // URL to Twitter thread for Level 7
+  twitterThreadDate DateTime? // Date when Twitter thread was shared
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relation to Project
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

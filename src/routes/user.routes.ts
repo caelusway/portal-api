@@ -25,10 +25,14 @@ router.post('/', async (req: any, res: any) => {
     if (!existingUser && wallet) {
       existingUser = await prisma.bioUser.findUnique({ where: { wallet } });
     }
+    // Also check if a user with this email already exists
+    if (!existingUser && email) {
+      existingUser = await prisma.bioUser.findUnique({ where: { email } });
+    }
 
     if (existingUser) {
       return res.status(400).json({
-        error: 'User already exists with this privyId or wallet',
+        error: 'User already exists with this privyId, wallet, or email',
       });
     }
 
@@ -1072,7 +1076,10 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
       platformId, 
       username, 
       email, 
-      avatarUrl 
+      avatarUrl,
+      name,
+      accessToken,
+      refreshToken 
     } = req.body;
 
     if (!id) {
@@ -1126,6 +1133,7 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
         updateData = {
           twitterId: null,
           twitterUsername: null,
+          twitterName: null,
           twitterAvatar: null,
           twitterAccessToken: null,
           twitterRefreshToken: null,
@@ -1157,13 +1165,18 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
           discordUsername: username,
           discordAvatar: avatarUrl,
           discordConnectedAt: new Date(),
+          discordAccessToken: accessToken,
+          discordRefreshToken: refreshToken,
         };
       } else if (platform === 'twitter') {
         updateData = {
           twitterId: platformId,
           twitterUsername: username,
+          twitterName: name,
           twitterAvatar: avatarUrl,
           twitterConnectedAt: new Date(),
+          twitterAccessToken: accessToken,
+          twitterRefreshToken: refreshToken,
         };
       }
     }
@@ -1173,6 +1186,50 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
       where: { id },
       data: updateData,
     });
+
+    // If this was a Twitter connection, also update or create Twitter record for the user's project
+    if (platform === 'twitter' && !isDisconnecting) {
+      try {
+        // Find the user's project
+        const projectMember = await prisma.projectMember.findFirst({
+          where: { bioUserId: id },
+          include: { project: true }
+        });
+        
+        if (projectMember && projectMember.project) {
+          // Check if Twitter record already exists
+          const existingTwitter = await prisma.twitter.findUnique({
+            where: { projectId: projectMember.projectId }
+          });
+          
+          if (existingTwitter) {
+            // Update existing Twitter record
+            await prisma.twitter.update({
+              where: { id: existingTwitter.id },
+              data: {
+                connected: true,
+                twitterUsername: username,
+                twitterId: platformId,
+                updatedAt: new Date()
+              }
+            });
+          } else {
+            // Create new Twitter record for project
+            await prisma.twitter.create({
+              data: {
+                projectId: projectMember.projectId,
+                connected: true,
+                twitterUsername: username,
+                twitterId: platformId,
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing project Twitter record:', err);
+        // Don't fail the user update if project record update fails
+      }
+    }
 
     return res.json({
       success: true,
