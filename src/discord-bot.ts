@@ -9,8 +9,6 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   ChannelType,
-  StringSelectMenuBuilder,
-  ActionRowBuilder,
 } from 'discord.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -384,7 +382,7 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
 // Track when members join
 client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
   const guild = member.guild;
-  console.log(`[MEMBER_JOIN] (Unified Handler) New member joined ${guild.name}: ${member.user.tag} (${member.user.id})`);
+  console.log(`[MEMBER_JOIN] New member joined ${guild.name}: ${member.user.tag} (${member.user.id})`);
 
   try {
     // Update member count immediately when someone joins
@@ -397,51 +395,80 @@ client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
 
     // Send DM to project founders
     console.log(`[MEMBER_JOIN] Starting founder DM process for guild ${guild.id}`);
+    
     // Find the Discord record for this server
-    const discordRecord = await prisma.discord.findFirst({ where: { serverId: guild.id } });
+    console.log(`[MEMBER_JOIN] Looking up Discord record for server ${guild.id}`);
+    const discordRecord = await prisma.discord.findFirst({ 
+      where: { serverId: guild.id } 
+    });
+    
     if (discordRecord) {
       console.log(`[MEMBER_JOIN] Found Discord record for server ${guild.id}, project ID: ${discordRecord.projectId}`);
+      
       // Find the project to get the founders
+      console.log(`[MEMBER_JOIN] Looking up project ${discordRecord.projectId} with founders`);
       const project = await prisma.project.findUnique({
         where: { id: discordRecord.projectId },
         include: {
           members: {
             where: { role: "founder" },
-            include: { bioUser: true }
+            include: {
+              bioUser: true
+            }
           }
         }
       });
+
       if (project && project.members && project.members.length > 0) {
         console.log(`[MEMBER_JOIN] Found ${project.members.length} founders for project ${project.id}`);
+        
+        // Log founder details for debugging (excluding sensitive info)
+        project.members.forEach((founder, index) => {
+          console.log(`[MEMBER_JOIN] Founder ${index + 1}:`);
+          console.log(`  - bioUserId: ${founder.bioUserId}`);
+          console.log(`  - discordId present: ${founder.bioUser?.discordId ? 'YES' : 'NO'}`);
+          if (founder.bioUser?.discordId) {
+            console.log(`  - discordId: ${founder.bioUser.discordId}`);
+          }
+        });
+        
         // For each founder with a Discord ID, send a DM
         for (const founderMember of project.members) {
           if (founderMember.bioUser && founderMember.bioUser.discordId) {
             try {
+              // Try to fetch the Discord user object for this founder
               const founderUser = await client.users.fetch(founderMember.bioUser.discordId);
+              
               if (founderUser) {
-                const dmMessage = `👋 **New Member Alert!**\n\nA new member has joined your BioDAO community server: **${guild.name}**\n\n**Member Details:**\n• **Username:** ${member.user.tag}\n• **Discord ID:** ${member.id}\n• **Joined:** ${new Date().toLocaleString()}\n\nConsider reaching out to welcome them to your BioDAO community!`;
-                try {
-                  await founderUser.send(dmMessage);
-                  console.log(`[Discord] Sent DM to founder ${founderUser.tag} (${founderMember.bioUser.id})`);
-                } catch (dmError) {
-                  console.error(`[Discord] Failed to send DM to founder ${founderUser.tag}:`, dmError);
-                }
+                // Create and send a detailed notification message about the new member
+                const dmMessage = `👋 **New Member Alert!**
+
+A new member has joined your BioDAO community server: **${guild.name}**
+
+**Member Details:**
+• **Username:** ${member.user.tag}
+• **Discord ID:** ${member.id}
+• **Joined:** ${new Date().toLocaleString()}
+
+Consider reaching out to welcome them to your BioDAO community!`;
+
+                //await founderUser.send(dmMessage);
+                console.log(`[Discord] Sent DM to founder ${founderUser.tag} (${founderMember.bioUser.id})`);
               }
             } catch (dmError) {
-              console.error(`[Discord] Failed to fetch founder user ${founderMember.bioUser.discordId}:`, dmError);
+              console.error(`[Discord] Failed to send DM to founder ${founderMember.bioUser.discordId}:`, dmError);
             }
           }
         }
+
+        // Send welcome DM to the new member to collect LinkedIn/profile information
+        await sendWelcomeDMToNewMember(member, discordRecord, project);
       } else {
         console.log(`[MEMBER_JOIN] No founders found for project ${discordRecord.projectId}`);
       }
     } else {
       console.log(`[MEMBER_JOIN] No Discord record found for server ${guild.id}`);
     }
-
-    // Always send onboarding DM to the new member
-    await sendWelcomeDMToNewMember(member);
-    console.log(`[MEMBER_JOIN] Onboarding DM sent to new member ${member.user.tag}`);
 
     // Check level requirements when specific member count thresholds are hit
     const memberCount = guild.memberCount;
@@ -455,7 +482,6 @@ client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
   } catch (error) {
     console.error(`[MEMBER_JOIN] Error in GuildMemberAdd event handler:`, error);
   }
-  console.log(`[MEMBER_JOIN] (Unified Handler) Finished processing new member ${member.user.tag}`);
 });
 
 /**
@@ -511,60 +537,90 @@ async function saveDiscordMember(member: GuildMember): Promise<void> {
 /**
  * Send a welcome DM to a new Discord member asking for LinkedIn and scientific profile URLs
  */
-async function sendLegacyWelcomeDMToNewMember(member: GuildMember, discordRecord: any, project: any): Promise<void> {
+async function sendWelcomeDMToNewMember(member: GuildMember, discordRecord: any, project: any): Promise<void> {
   try {
-    console.log(`[WELCOME_DM] Sending legacy welcome message to ${member.user.tag}`);
+    console.log(`[WELCOME_DM] Sending welcome message to ${member.user.tag}`);
+    
+    // Find any founders with Discord IDs to notify them
+    const founders = await prisma.projectMember.findMany({
+      where: {
+        projectId: project.id,
+        role: 'founder',
+        bioUser: {
+          discordId: {
+            not: null
+          }
+        }
+      },
+      include: {
+        bioUser: true
+      }
+    });
+    
+    // Notify founders about the new member
+    if (founders && founders.length > 0) {
+      console.log(`[WELCOME_DM] Found ${founders.length} founders to notify about new member`);
+      
+      for (const founder of founders) {
+        try {
+          // Add null check before accessing discordId
+          if (!founder.bioUser?.discordId) {
+            console.log(`[WELCOME_DM] Founder has no Discord ID, skipping notification`);
+            continue;
+          }
+          
+          console.log(`[WELCOME_DM] Sending notification to founder with ID ${founder.bioUser.discordId}`);
+          const founderUser = await client.users.fetch(founder.bioUser.discordId);
+          
+          if (founderUser) {
+            // Create a more detailed notification message with member info
+            const founderNotification = `
+👋 **New Member Alert!**
 
-    // Try to infer contributor type from project, member, or discordRecord context (customize as needed)
-    let inferredType: string | undefined = undefined;
-    // Example: if you have a way to infer type, set inferredType = 'scientist', 'developer', etc.
-    // Otherwise, leave as undefined
+A new member has joined your BioDAO community server: **${project.projectName || member.guild.name}**
 
-    // If type is not inferred, ask the user to self-identify
-    if (!inferredType) {
-      const typePrompt = `👋 Welcome to **${project?.projectName || member.guild.name}**!
+**Member Details:**
+• **Username:** ${member.user.tag}
+• **Discord ID:** ${member.user.id}
+• **Joined:** ${new Date().toLocaleString()}
+• **Account Created:** ${member.user.createdAt.toLocaleString()}
 
-To help us get to know you, how would you self-identify? Please reply with a number or type:
-1️⃣ Scientist/Researcher
-2️⃣ Developer/Engineer
-3️⃣ Designer/Creator
-4️⃣ Community Builder
-5️⃣ Business/Operations
-6️⃣ Web3 Enthusiast
+They'll be prompted to share their LinkedIn and scientific profiles for better community connection. I'll recommend a 1:1 onboarding meeting if they share scientific profiles.
+
+🔔 **Recommendation:** Consider proactively reaching out to welcome them to the community!
 `;
-      await member.send(typePrompt);
-      // Optionally, you could set up a message collector here to handle their response and then send the credential prompt below.
-      return;
+            await founderUser.send(founderNotification);
+            console.log(`[WELCOME_DM] Successfully sent notification to founder ${founderUser.tag}`);
+          }
+        } catch (error) {
+          console.error(`[WELCOME_DM] Error notifying founder ${founder.bioUser?.discordId || founder.bioUserId}:`, error);
+        }
+      }
     }
 
-    // If type is inferred, send the appropriate credential prompt
-    let credentialPrompt = '';
-    switch (inferredType) {
-      case 'scientist':
-        credentialPrompt = 'Please share your LinkedIn and any scientific profile links (Google Scholar, ORCID, etc).';
-        break;
-      case 'developer':
-        credentialPrompt = 'Please share your LinkedIn and GitHub profile links.';
-        break;
-      case 'designer':
-        credentialPrompt = 'Please share your LinkedIn and portfolio links (Behance, Dribbble, etc).';
-        break;
-      case 'community':
-        credentialPrompt = 'Please share your LinkedIn or any relevant community experience links.';
-        break;
-      case 'business':
-        credentialPrompt = 'Please share your LinkedIn or company website.';
-        break;
-      case 'web3':
-        credentialPrompt = 'Please share your LinkedIn, Twitter, or any web3 project links that best represent your background.';
-        break;
-      default:
-        credentialPrompt = 'Please share any links or info that best represent your background.';
-        break;
-    }
-    await member.send(credentialPrompt);
+    // Create welcome message with embedded form, now with more guidance
+    const welcomeMessage = `
+👋 Welcome to **${project.projectName || member.guild.name}**! 
+
+We're excited to have you join our scientific community. To help foster collaboration, we'd love to know a bit more about you.
+
+**To enhance your experience, could you please share:**
+
+1️⃣ Your LinkedIn profile URL (if available)
+2️⃣ Your scientific profile URLs (e.g., Google Scholar, ORCID, ResearchGate, Exaly.com) - feel free to share multiple profiles! (optional)
+3️⃣ Any research papers or projects you'd like to share
+
+You can respond to any of these questions whenever you're ready - just send them as separate messages. I'll be here to collect your responses anytime!
+`;
+
+    await member.send(welcomeMessage);
+    console.log(`[WELCOME_DM] Sent welcome message to ${member.user.tag}`);
+    
+    // Set up message collector for this user
+    setupPersistentResponseCollector(member.user.id, member.guild.id);
+    
   } catch (error) {
-    console.error(`[WELCOME_DM] Error sending legacy welcome DM to ${member.user.tag}:`, error);
+    console.error(`[WELCOME_DM] Error sending welcome DM to ${member.user.tag}:`, error);
   }
 }
 
@@ -577,8 +633,6 @@ interface UserProfileData {
   researchPapers?: string;
   lastInteraction: Date;
   isComplete: boolean;
-  contributorType?: ContributorType;
-  currentStep?: OnboardingStep;
 }
 
 // Add this type definition to fix errors with pendingResponses
@@ -2576,16 +2630,22 @@ export function initDiscordBot() {
                   
                   if (founderUser) {
                     // Create and send a detailed notification message about the new member
-                    const dmMessage = `👋 **New Member Alert!**\n\nA new member has joined your BioDAO community server: **${guild.name}**\n\n**Member Details:**\n• **Username:** ${member.user.tag}\n• **Discord ID:** ${member.id}\n• **Joined:** ${new Date().toLocaleString()}\n\nConsider reaching out to welcome them to your BioDAO community!`;
-                    try {
-                      await founderUser.send(dmMessage);
-                      console.log(`[Discord] Sent DM to founder ${founderUser.tag} (${founderMember.bioUser.id})`);
-                    } catch (dmError) {
-                      console.error(`[Discord] Failed to send DM to founder ${founderUser.tag}:`, dmError);
-                    }
+                    const dmMessage = `👋 **New Member Alert!**
+
+A new member has joined your BioDAO community server: **${guild.name}**
+
+**Member Details:**
+• **Username:** ${member.user.tag}
+• **Discord ID:** ${member.id}
+• **Joined:** ${new Date().toLocaleString()}
+
+Consider reaching out to welcome them to your BioDAO community!`;
+
+                    //await founderUser.send(dmMessage);
+                    console.log(`[Discord] Sent DM to founder ${founderUser.tag} (${founderMember.bioUser.id})`);
                   }
                 } catch (dmError) {
-                  console.error(`[Discord] Failed to fetch founder user ${founderMember.bioUser.discordId}:`, dmError);
+                  console.error(`[Discord] Failed to send DM to founder ${founderMember.bioUser.discordId}:`, dmError);
                 }
               }
             }
@@ -3345,93 +3405,5 @@ This member may be a good candidate for collaboration or a 1:1 onboarding meetin
     console.error(`[MEMBER_PROFILE] Error notifying founders about member profile:`, error);
   }
 }
-
-// Place enums at the top
-enum OnboardingStep {
-  ContributorTypeRequested = 'contributor_type_requested',
-  CredentialsRequested = 'credentials_requested',
-  Complete = 'complete'
-}
-
-enum ContributorType {
-  Scientist = 'scientist',
-  Developer = 'developer',
-  Designer = 'designer',
-  Community = 'community',
-  Business = 'business',
-  Web3 = 'web3', // Web3 Enthusiast
-}
-
-// Only one definition of sendWelcomeDMToNewMember
-async function sendWelcomeDMToNewMember(member: GuildMember) {
-  // Initialize userProfileCollections for onboarding
-  userProfileCollections.set(member.user.id, {
-    userId: member.user.id,
-    guildId: member.guild.id,
-    lastInteraction: new Date(),
-    isComplete: false,
-    currentStep: OnboardingStep.ContributorTypeRequested,
-  });
-
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('contributor_type_select')
-    .setPlaceholder('Select your contributor type')
-    .addOptions([
-      { label: 'Scientist/Researcher', value: 'scientist', emoji: '🧑‍🔬' },
-      { label: 'Developer/Engineer', value: 'developer', emoji: '💻' },
-      { label: 'Designer/Creator', value: 'designer', emoji: '🎨' },
-      { label: 'Community Builder', value: 'community', emoji: '🌱' },
-      { label: 'Business/Operations', value: 'business', emoji: '📈' },
-      { label: 'Web3 Enthusiast', value: 'web3', emoji: '✨' },
-    ]);
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-
-  try {
-    await member.send({
-      content: "👋 Welcome! How would you self-identify? Please select your contributor type below:",
-      components: [row]
-    });
-    console.log(`[ONBOARDING_DM] Sent onboarding DM to ${member.user.tag}`);
-  } catch (err) {
-    console.error(`[ONBOARDING_DM] Failed to send onboarding DM to ${member.user.tag}:`, err);
-    // Optionally notify in a public channel here if desired
-  }
-}
-
-// Only one interaction handler for contributor type select
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isStringSelectMenu()) return;
-  if (interaction.customId !== 'contributor_type_select') return;
-  const userId = interaction.user.id;
-  const selectedType = interaction.values[0];
-  const profileData = userProfileCollections.get(userId);
-  if (!profileData) return;
-  profileData.contributorType = selectedType as ContributorType;
-  profileData.currentStep = OnboardingStep.CredentialsRequested;
-  userProfileCollections.set(userId, profileData);
-  let credentialPrompt = '';
-  switch (selectedType) {
-    case 'scientist':
-      credentialPrompt = 'Please share your LinkedIn and any scientific profile links (Google Scholar, ORCID, etc).';
-      break;
-    case 'developer':
-      credentialPrompt = 'Please share your LinkedIn and GitHub profile links.';
-      break;
-    case 'designer':
-      credentialPrompt = 'Please share your LinkedIn and portfolio links (Behance, Dribbble, etc).';
-      break;
-    case 'community':
-      credentialPrompt = 'Please share your LinkedIn or any relevant community experience links.';
-      break;
-    case 'business':
-      credentialPrompt = 'Please share your LinkedIn or company website.';
-      break;
-    case 'web3':
-      credentialPrompt = 'Please share your LinkedIn, Twitter, or any web3 project links that best represent your background.';
-      break;
-  }
-  await interaction.reply({ content: credentialPrompt, ephemeral: true });
-});
-
 
 
