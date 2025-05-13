@@ -97,15 +97,10 @@ router.get('/privy/:privyId', async (req: any, res: any) => {
   try {
     const { privyId } = req.params;
 
+    console.log('privyId', privyId);
+
     const user = await prisma.bioUser.findUnique({
-      where: { privyId },
-      include: {
-        memberships: {
-          include: {
-            project: true,
-          },
-        },
-      },
+      where: { privyId }
     });
 
     if (!user) {

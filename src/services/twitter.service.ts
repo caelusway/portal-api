@@ -138,7 +138,7 @@ class TwitterService {
       if (verifiedUrlsInfo.oldTweetsCount > 0) {
         timestampWarning = ` (${verifiedUrlsInfo.oldTweetsCount} tweet(s) were rejected for being older than 7 days)`;
       }
-      
+
       // Extract tweet IDs from verified URLs for record-keeping
       const newTweetIds = verifiedUrlsInfo.verifiedUrls.map(url => {
         const twitterMatch = url.match(/twitter\.com\/[^\/]+\/status\/(\d+)/);

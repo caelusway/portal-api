@@ -85,6 +85,8 @@ model NFT {
   projectId       String
   transactionHash String?
   imageUrl        String?
+  tokenId         String?  // Added for IP-NFTs
+  metadataUri     String?  // Added for IP-NFTs
   project         Project  @relation(fields: [projectId], references: [id])
   mintedAt        DateTime @default(now())
 }
@@ -223,6 +225,8 @@ model Twitter {
   blogpostDate      DateTime? // Date when blogpost was published
   twitterThreadUrl  String?  // URL to Twitter thread for Level 7
   twitterThreadDate DateTime? // Date when Twitter thread was shared
+  loomVideoUrl      String?  // URL to welcome Loom video for Level 7
+  loomVideoDate     DateTime? // Date when Loom video was recorded
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   

@@ -5,7 +5,7 @@ dotenv.config();
 
 // Environment
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3002;
 
 // API Keys
 const API_KEY = process.env.API_KEY || 'dev_api_key';
@@ -36,6 +36,9 @@ export default {
   env: NODE_ENV,
   port: PORT,
   publicPath: PUBLIC_PATH,
+  app: {
+    url: process.env.FRONTEND_URL || 'http://localhost:3000',
+  },
   api: {
     key: API_KEY,
   },

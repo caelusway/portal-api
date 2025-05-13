@@ -137,8 +137,13 @@ export async function checkBotInstallationStatus(
   }
 }
 
-export function getBotInstallationUrl(): string {
-  return `${DISCORD_BOT_CONFIG.baseUrl}?client_id=${DISCORD_BOT_CONFIG.clientId}&permissions=${DISCORD_BOT_CONFIG.permissions}&scope=${DISCORD_BOT_CONFIG.scope}`;
+export function getBotInstallationUrl(
+  clientId: string,
+  permissions: string,
+  serverId: string,
+  verificationToken: string
+): string {
+  return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot&guild_id=${serverId}&state=${verificationToken}`;
 }
 
 /**
@@ -180,21 +185,50 @@ export function extractDiscordInfo(message: string): {
 }
 
 /**
- * Gets the requirements for the next level based on current level
- * @param currentLevel - The current level of the project
- * @returns Array of requirement strings for the next level
+ * Get the requirements for advancing to the next level
+ * @param currentLevel Current level
+ * @returns Array of requirements
  */
 export function getNextLevelRequirements(currentLevel: number): string[] {
   switch (currentLevel) {
     case 1:
-      return ['Mint Idea NFT', 'Mint Vision NFT'];
+      return [
+        "Mint Idea NFT",
+        "Mint Vision/Hypothesis NFT",
+      ];
     case 2:
-      return ['Create Discord Server', 'Reach 4+ Members'];
+      return [
+        "Create and set up Discord server",
+        "Install verification bot",
+        "Have at least 4 Discord members",
+      ];
     case 3:
-      return ['Reach 5+ Members', 'Share 5+ Scientific Papers', 'Send 50+ Messages'];
+      return [
+        "Have at least 5 Discord members",
+        "Share at least 5 scientific papers in Discord",
+        "Have at least 50 quality messages in Discord",
+      ];
     case 4:
-      return ['All requirements met - Bio team will contact you'];
+      return [
+        "Connect Twitter account",
+        "Publish 3 introductory tweets about your DAO",
+      ];
+    case 5:
+      return [
+        "Have at least 10 verified scientists in your community",
+        "Host a Twitter Space",
+      ];
+    case 6:
+      return [
+        "Write and publish a visionary blogpost",
+        "Convert blogpost into Twitter thread",
+      ];
+    case 7:
+      return [
+        "All requirements completed!",
+        "Continue growing your community and scientific impact",
+      ];
     default:
-      return ['Unknown level'];
+      return ["Unknown level"];
   }
 }

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Agent Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f8fa;
+            color: #1a202c;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        h1 {
+            color: #2c5282;
+            margin-top: 0;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+        }
+        .section h2 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        input, button, select {
+            padding: 8px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4299e1;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: none;
+        }
+        button:hover {
+            background-color: #3182ce;
+        }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            background-color: #2d3748;
+            color: #e2e8f0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .message {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+        .incoming {
+            background-color: #2c5282;
+        }
+        .outgoing {
+            background-color: #38a169;
+        }
+        .error {
+            background-color: #e53e3e;
+        }
+        .debug {
+            background-color: #6b46c1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket Agent Test</h1>
+        
+        <div class="section">
+            <h2>Connection Status</h2>
+            <div class="input-group">
+                <input type="text" id="serverUrl" value="ws://localhost:3001/ws/agent" placeholder="WebSocket Server URL">
+                <button id="connect">Connect</button>
+                <button id="disconnect">Disconnect</button>
+                <span id="status">Disconnected</span>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Authentication</h2>
+            <div class="input-group">
+                <select id="authType">
+                    <option value="payload">Auth with payload</option>
+                    <option value="direct">Auth direct format</option>
+                    <option value="raw">Raw message</option>
+                </select>
+                <input type="text" id="authId" value="test-id-123" placeholder="Privy ID or Wallet">
+                <select id="idType">
+                    <option value="privyId">privyId</option>
+                    <option value="wallet">wallet</option>
+                </select>
+                <button id="authenticate">Authenticate</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Send Message</h2>
+            <div class="input-group">
+                <select id="messageFormat">
+                    <option value="standard">Standard Format</option>
+                    <option value="direct">Direct Format</option>
+                    <option value="nested">Nested Format</option>
+                    <option value="raw">Raw Content</option>
+                </select>
+                <input type="text" id="message" placeholder="Message content">
+                <button id="sendMessage">Send</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Test Buttons</h2>
+            <button id="typing-on">Test Agent Typing ON</button>
+            <button id="typing-off">Test Agent Typing OFF</button>
+            <button id="testAuth1">Test Auth Format 1</button>
+            <button id="testAuth2">Test Auth Format 2</button>
+            <button id="testAuth3">Test Auth Format 3</button>
+            <button id="testAuth4">Test Auth Format 4</button>
+        </div>
+        
+        <div class="section">
+            <h2>WebSocket Messages</h2>
+            <div id="messages"></div>
+            <button id="clearMessages">Clear Messages</button>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let isConnected = false;
+
+        // DOM Elements
+        const connectBtn = document.getElementById('connect');
+        const disconnectBtn = document.getElementById('disconnect');
+        const statusSpan = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const serverUrlInput = document.getElementById('serverUrl');
+        const authTypeSelect = document.getElementById('authType');
+        const authIdInput = document.getElementById('authId');
+        const idTypeSelect = document.getElementById('idType');
+        const authenticateBtn = document.getElementById('authenticate');
+        const messageInput = document.getElementById('message');
+        const sendMessageBtn = document.getElementById('sendMessage');
+        const clearMessagesBtn = document.getElementById('clearMessages');
+        const typingOnBtn = document.getElementById('typing-on');
+        const typingOffBtn = document.getElementById('typing-off');
+        const testAuth1Btn = document.getElementById('testAuth1');
+        const testAuth2Btn = document.getElementById('testAuth2');
+        const testAuth3Btn = document.getElementById('testAuth3');
+        const testAuth4Btn = document.getElementById('testAuth4');
+
+        // Helper Functions
+        function logMessage(message, type = 'debug') {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', type);
+            
+            // Format timestamp
+            const timestamp = new Date().toTimeString().split(' ')[0];
+            
+            if (typeof message === 'object') {
+                messageElement.innerText = `[${timestamp}] ${JSON.stringify(message, null, 2)}`;
+            } else {
+                messageElement.innerText = `[${timestamp}] ${message}`;
+            }
+            
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function logDebug(message, id) {
+            const logMsg = id ? `DEBUG ${id}: ${message}` : message;
+            console.log(logMsg);
+            logMessage(logMsg, 'debug');
+        }
+
+        function updateConnectionStatus(connected) {
+            isConnected = connected;
+            statusSpan.innerText = connected ? 'Connected' : 'Disconnected';
+            statusSpan.style.color = connected ? 'green' : 'red';
+        }
+
+        // Connection Functions
+        function connect() {
+            if (isConnected) {
+                logMessage('Already connected', 'error');
+                return;
+            }
+            
+            const url = serverUrlInput.value;
+            
+            // Log URL details for debugging
+            try {
+                const parsedUrl = new URL(url);
+                logMessage(`Connection URL details: ${JSON.stringify({
+                    protocol: parsedUrl.protocol,
+                    host: parsedUrl.host,
+                    pathname: parsedUrl.pathname,
+                    search: parsedUrl.search,
+                    hash: parsedUrl.hash
+                })}`, 'debug');
+            } catch (e) {
+                logMessage(`Invalid URL: ${url}`, 'error');
+                return;
+            }
+            
+            socket = new WebSocket(url);
+            
+            socket.onopen = () => {
+                updateConnectionStatus(true);
+                logMessage('WebSocket connection established', 'incoming');
+            };
+            
+            socket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    logMessage(`⬇️ Received: ${JSON.stringify(data, null, 2)}`, 'incoming');
+                } catch (e) {
+                    logMessage(`⬇️ Received: ${event.data}`, 'incoming');
+                }
+            };
+            
+            socket.onerror = (error) => {
+                logMessage(`WebSocket error: ${error.message}`, 'error');
+            };
+            
+            socket.onclose = () => {
+                updateConnectionStatus(false);
+                logMessage('WebSocket connection closed', 'incoming');
+            };
+        }
+
+        function disconnect() {
+            if (!isConnected) {
+                logMessage('Not connected', 'error');
+                return;
+            }
+            
+            socket.close();
+        }
+
+        // Authentication Functions
+        function authenticate() {
+            if (!isConnected) {
+                logMessage('Not connected', 'error');
+                return;
+            }
+            
+            const authType = authTypeSelect.value;
+            const idType = idTypeSelect.value;
+            const authId = authIdInput.value;
+            
+            let authMessage;
+            
+            if (authType === 'payload') {
+                // Standard format with payload
+                authMessage = {
+                    type: 'auth',
+                    payload: {
+                        [idType]: authId
+                    }
+                };
+                logMessage(`⬆️ Auth with payload message: ${JSON.stringify(authMessage)}`, 'outgoing');
+            } else if (authType === 'direct') {
+                // Direct format without nested payload
+                authMessage = {
+                    type: 'auth',
+                    [idType]: authId
+                };
+                logMessage(`⬆️ Auth with direct message: ${JSON.stringify(authMessage)}`, 'outgoing');
+            } else if (authType === 'raw') {
+                // Raw message format (just the ID)
+                authMessage = {
+                    [idType]: authId
+                };
+                logMessage(`⬆️ Auth with raw message: ${JSON.stringify(authMessage)}`, 'outgoing');
+            }
+            
+            const messageString = JSON.stringify(authMessage);
+            logMessage(`⬆️ String being sent: ${messageString}`, 'debug');
+            socket.send(messageString);
+        }
+
+        // Send a chat message
+        function sendChatMessage() {
+            if (!isConnected) {
+                logMessage('Not connected', 'error');
+                return;
+            }
+            
+            const content = messageInput.value;
+            if (!content) {
+                logMessage('Message content is required', 'error');
+                return;
+            }
+            
+            // Try different message formats based on dropdown selection
+            const messageFormatSelect = document.getElementById('messageFormat') || { value: 'standard' };
+            let message;
+            
+            switch(messageFormatSelect.value) {
+                case 'direct':
+                    // Direct content format
+                    message = {
+                        type: 'message',
+                        content: content
+                    };
+                    break;
+                case 'nested':
+                    // Nested content in payload
+                    message = {
+                        type: 'message',
+                        payload: {
+                            content: content
+                        }
+                    };
+                    break;
+                case 'raw':
+                    // Raw content only
+                    message = {
+                        content: content
+                    };
+                    break;
+                case 'standard':
+                default:
+                    // Standard format
+                    message = {
+                        type: 'message',
+                        payload: {
+                            content: content
+                        }
+                    };
+                    break;
+            }
+            
+            logMessage(`⬆️ Sending message: ${JSON.stringify(message)}`, 'outgoing');
+            socket.send(JSON.stringify(message));
+            messageInput.value = '';
+        }
+
+        // Test functions
+        function sendTypingTest(isTyping) {
+            if (!isConnected) {
+                logMessage('Not connected', 'error');
+                return;
+            }
+            
+            const message = {
+                type: 'agent_typing_test',
+                payload: {
+                    isTyping
+                }
+            };
+            
+            logMessage(`⌨️ Sending typing test: ${JSON.stringify(message, null, 2)}`, 'outgoing');
+            socket.send(JSON.stringify(message));
+        }
+
+        function sendTestAuth(option) {
+            if (!isConnected) {
+                logMessage('Not connected', 'error');
+                return;
+            }
+            
+            let message;
+            
+            switch(option) {
+                case 1:
+                    message = {
+                        type: 'auth',
+                        payload: {
+                            privyId: 'pure-test-123'
+                        }
+                    };
+                    break;
+                case 2:
+                    message = {
+                        type: 'auth',
+                        payload: {
+                            wallet: '0x1234567890123456789012345678901234567890'
+                        }
+                    };
+                    break;
+                case 3:
+                    message = {
+                        privyId: 'inner-only-test'
+                    };
+                    break;
+                case 4:
+                    message = {
+                        type: 'auth',
+                        privyId: 'direct-test-123'
+                    };
+                    break;
+            }
+            
+            logDebug(`Sending raw message: ${JSON.stringify(message)}`, option);
+            socket.send(JSON.stringify(message));
+        }
+
+        // Event Listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        authenticateBtn.addEventListener('click', authenticate);
+        sendMessageBtn.addEventListener('click', sendChatMessage);
+        clearMessagesBtn.addEventListener('click', () => {
+            messagesDiv.innerHTML = '';
+        });
+        
+        typingOnBtn.addEventListener('click', () => sendTypingTest(true));
+        typingOffBtn.addEventListener('click', () => sendTypingTest(false));
+        
+        testAuth1Btn.addEventListener('click', () => sendTestAuth(1));
+        testAuth2Btn.addEventListener('click', () => sendTestAuth(2));
+        testAuth3Btn.addEventListener('click', () => sendTestAuth(3));
+        testAuth4Btn.addEventListener('click', () => sendTestAuth(4));
+        
+        // Send message when Enter is pressed
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+
+        // Initialize
+        updateConnectionStatus(false);
+    </script>
+</body>
+</html> 

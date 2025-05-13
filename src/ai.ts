@@ -491,55 +491,82 @@ To reach Level 2, you need to:
 1. Mint your Idea NFT
 2. Mint your Vision NFT
 
-Would you like me to help you mint one of these NFTs now?`;
+I'll help you mint these NFTs directly.`;
       
     case 2:
       return `
 You're on Level 2: Discord Setup
 
 To reach Level 3, you need to:
-1. Create a Discord server for your BioDAO
-2. Install our verification bot
-3. Grow your server to 4+ members (you have ${project?.Discord?.memberCount || 0})
+1. Create a Discord server for your BioDAO community
+2. Share your server invite link with me (it should look like discord.gg/123abc)
+3. Install our verification bot (I'll provide the link after you share your server)
+4. Grow your server to 4+ members (you currently have ${project?.Discord?.memberCount || 0})
 
-What would you like help with first?`;
+For additional guidance, check out our Discord Basics Tutorial Video: https://drive.google.com/file/u/1/d/1ntEA39P94KkeZLa2eT2OdrMOFjVbgUbh/preview?pli=1`;
       
     case 3:
       return `
 You're on Level 3: Community Initiated
 
 To reach Level 4, you need to:
-1. Grow your Discord community to 10+ members (you have ${project?.Discord?.memberCount || 0})
-2. Have members share 25+ scientific papers in your Discord
-3. Reach 100+ messages in your Discord
+1. Grow your Discord community to 5+ members (you have ${project?.Discord?.memberCount || 0})
+2. Have members share 5+ scientific papers in your Discord
+3. Reach 50+ messages in your Discord
 
-What growth strategy would you like to focus on?`;
+Focus on scientific content sharing and encouraging discussion among members.`;
       
     case 4:
       return `
 You're on Level 4: Community Growth + Proof
 
 To reach Level 5, you need to:
-1. Grow your Discord community to 10+ members (you have ${project?.Discord?.memberCount || 0})
-2. Have 25+ scientific papers shared in your Discord
-3. Reach 100+ messages in your Discord
-4. Connect your Twitter account and post 3+ tweets about your BioDAO
+1. Connect your Twitter account via http://localhost:3000/settings?tab=connections
+2. Publish 3 introductory tweets about your DAO and its mission
+3. Share the tweet URLs with me for verification
 
 ${!project?.Twitter?.connected || (project?.Twitter?.introTweetsCount || 0) < 3 ? getTwitterGuidance(project) : ''}
 
-What would you like to focus on next?`;
+You've already completed the Discord requirements. Now focus on establishing your social presence.`;
       
     case 5:
       return `
-Congratulations! You've reached Level 5: BioDAO Sandbox
+You're on Level 5: Social Presence
 
-You've successfully completed all requirements for the BioDAO onboarding process. Here's what you can do next:
-1. Continue growing your community on Discord and Twitter
-2. Explore funding opportunities for your research
-3. Develop governance structures for your BioDAO
-4. Connect with other BioDAO projects for collaboration
+To reach Level 6, you need to:
+1. Grow your community to include at least 10 verified scientists or patients
+2. Host a public Twitter Space to engage your audience
 
-What aspect of your BioDAO would you like to develop further?`;
+Scientists are verified when they join your Discord and share their scientific profiles through our bot's DM system.`;
+      
+    case 6:
+      return `
+You're on Level 6: Scientific Community
+
+To reach Level 7 (final level), you need to:
+1. Write and publish a visionary blogpost about your DAO's future in 5-10 years
+2. Convert your blogpost into a Twitter thread and share it publicly
+
+This final level focuses on clearly articulating your long-term vision and expanding your public presence.`;
+
+    case 7:
+      return `
+You're on Level 7: Visionary Communication
+
+To complete the BioDAO onboarding process, you need to:
+1. Write and publish a visionary blogpost about your DAO's future in 5-10 years${project?.Twitter?.blogpostUrl ? ' ✅' : ''}
+2. Convert your blogpost into a Twitter thread and share it publicly${project?.Twitter?.twitterThreadUrl ? ' ✅' : ''}
+3. Record a welcome Loom video for new members${project?.Twitter?.loomVideoUrl ? ' ✅' : ''}
+
+For the Loom video:
+- Create a short (3-5 minute) welcome video introducing your DAO
+- Share your vision and how new members can contribute
+- Post it in your Discord server's welcome channel
+- Share the Loom video link with me to verify completion
+
+${project?.Twitter?.blogpostUrl && project?.Twitter?.twitterThreadUrl && project?.Twitter?.loomVideoUrl ? 
+'Congratulations! You\'ve completed all requirements of the BioDAO onboarding process! The Bio team will reach out to discuss next steps and opportunities within the ecosystem.' : 
+'Once all requirements are completed, your BioDAO will have finished the onboarding process and be ready for the next phase.'}`;
       
     default:
       return 'What can I help you with today?';

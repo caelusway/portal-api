@@ -312,6 +312,19 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
               );
             }
             break;
+          case 'verify_loom_video':
+            // Verify a Loom video for the project
+            if (data.userId && data.loomVideoUrl) {
+              await handleVerifyLoomVideo(ws, data.userId, data.loomVideoUrl);
+            } else {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: 'User ID and Loom video URL are required',
+                })
+              );
+            }
+            break;
           default:
             console.log('Unknown message type:', data.type);
         }
@@ -1147,7 +1160,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
           `- Your personal Discord account connected ❌`,
           `- Current members: ${currentMembers} (need ${membersNeeded > 0 ? `${membersNeeded} more` : 'no more'} to reach 4)\n`,
           `**Next Step: Connect Your Personal Discord Account**\n`,
-          `- Go to http://localhost:3000/settings?tab=connections`,
+          `- Go to ${config.app.url}/settings?tab=connections`,
           `- Click "Connect" next to Discord`,
           `- This connection is required to receive DM notifications when new scientists join`,
           `- The DM system is how scientists will verify their credentials\n`,
@@ -1209,7 +1222,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
         return [
           `**Congratulations on reaching Level 4!** \nTime to establish your BioDAO's social presence.\n`,
           `**Next Step: Connect Your Twitter Account**\n`,
-          `1. Go to http://localhost:3000/settings?tab=connections`,
+          `1. Go to ${config.app.url}/settings?tab=connections`,
           `2. Click "Connect" next to Twitter`,
           `3. Authorize the connection with your BioDAO's Twitter account\n`,
           `After connecting, you'll need to publish 3 introductory tweets about your DAO and its mission.\n`,
@@ -1651,6 +1664,44 @@ async function handlePotentialActions(
           console.error('Error verifying recent tweets:', error);
           actions.push({ action: 'verify_recent_tweets', success: false });
         }
+      }
+    }
+
+    // Check for Loom video URL if user is at level 7
+    if (project.level === 7) {
+      // Extract Loom video URLs from the message
+      const loomUrls = extractLoomUrls(userMessage);
+      
+      if (loomUrls.length > 0) {
+        console.log(`Found Loom video URL in message: ${loomUrls[0]}`);
+        
+        // Process the first Loom video URL (to avoid multiple processing)
+        try {
+          await handleVerifyLoomVideo(ws, userId, loomUrls[0]);
+          actions.push({ action: 'verify_loom_video', success: true });
+          console.log(`Loom video verification processed successfully for user ${userId}`);
+        } catch (error) {
+          console.error('Error verifying Loom video:', error);
+          actions.push({ action: 'verify_loom_video', success: false });
+        }
+      }
+      // Check if user is asking to verify their Loom video
+      else if (
+        userMessage.toLowerCase().includes('verify my loom') ||
+        userMessage.toLowerCase().includes('check my loom') ||
+        userMessage.toLowerCase().includes('verify loom video') ||
+        userMessage.toLowerCase().includes('check loom video') ||
+        userMessage.toLowerCase().includes('verify welcome video') ||
+        userMessage.toLowerCase().includes('submitted loom')
+      ) {
+        ws.send(
+          JSON.stringify({
+            type: 'message',
+            content: `Please share the link to your Loom welcome video so I can verify it. The link should look like "loom.com/share/...".`,
+            isFromAgent: true,
+          })
+        );
+        actions.push({ action: 'request_loom_video', success: true });
       }
     }
 
@@ -2355,7 +2406,7 @@ I'll help you track these metrics and provide strategies to achieve them.`;
 You've advanced to **Level ${newLevel}!**
 
 To advance to Level 5, you need to establish your social presence:
-1. **Connect DAO Twitter account** via the settings page (http://localhost:3000/settings?tab=connections)
+1. **Connect DAO Twitter account** via the settings page (${config.app.url}/settings?tab=connections)
 2. **Publish 3 introductory tweets** about your DAO and its mission`;
 
       // Save level-up message to chat
@@ -2569,7 +2620,7 @@ Next steps:
       
       const newLevel = 7;
       const shouldLevelUp = true;
-      const levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. You have now completed all levels of the BioDAO onboarding process!\n\nThe Bio team will reach out to discuss next steps and opportunities for your thriving scientific community.`;
+      const levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. This is the final level of the BioDAO onboarding process.\n\nTo complete the entire onboarding process, you need to:\n- Record a welcome Loom video for new members\n- Share the vision of your DAO\n- Post it on Discord and share the link with me`;
       
       // Code to perform the level up would go here, similar to other level transitions
       // Update the level in the database
@@ -2714,7 +2765,7 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           
           newLevel = 4;
           shouldLevelUp = true;
-          levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nYour next steps are:\n- Connect your Twitter account in settings [http://localhost:3000/settings]\n- Create 3 introductory tweets about your BioDAO`;
+          levelUpMessage = `🎉 Congratulations! You've reached Level 4: Scientific Proof.\n\nYour next steps are:\n- Connect your Twitter account in settings [${config.app.url}/settings]\n- Create 3 introductory tweets about your BioDAO`;
 
           
           // Send sandbox email when reaching level 4
@@ -2819,13 +2870,54 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           
           newLevel = 7;
           shouldLevelUp = true;
-          levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. You have now completed all levels of the BioDAO onboarding process!\n\nThe Bio team will reach out to discuss next steps and opportunities for your thriving scientific community.`;
+          levelUpMessage = `🎉 **Congratulations on reaching Level 7!**\n\nYou've successfully articulated your BioDAO's vision through both a comprehensive blogpost and an engaging Twitter thread. This is the final level of the BioDAO onboarding process.\n\nTo complete the entire onboarding process, you need to:\n- Record a welcome Loom video for new members\n- Share the vision of your DAO\n- Post it on Discord and share the link with me`;
         } else {
           const missingReqs = [];
           if (!hasBlogpost) missingReqs.push('visionary blogpost');
           if (!hasTwitterThread) missingReqs.push('Twitter thread');
+          
           console.log(
-            `Project ${project.id} doesn't meet level 7 requirements: ${missingReqs.join(', ')} not verified`
+            `Project ${project.id} doesn't meet level 7 requirements: Missing ${missingReqs.join(', ')}`
+          );
+        }
+        break;
+        
+      case 7:
+        // Check for Loom video completion
+        const hasLoomVideo = (project.Twitter as any)?.loomVideoUrl ? true : false;
+        
+        if (hasLoomVideo) {
+          // Check if we've recently sent this level-up notification
+          if (wasLevelUpRecentlySent(project.id, 8)) {
+            console.log(`Skipping duplicate level completion notification for user ${project.id} (sent recently)`);
+            return;
+          }
+          
+          // We don't increment the level, but we send a special completion message
+          levelUpMessage = `🎉 **Congratulations on completing the BioDAO onboarding process!**\n\nYou've successfully completed all requirements, including:\n- Minting your scientific NFTs\n- Building a Discord community\n- Sharing scientific content\n- Connecting your Twitter presence\n- Building a verified scientific membership\n- Articulating your vision through blog and Twitter\n- Creating a welcome video for new members\n\nThe Bio team will reach out to discuss next steps and opportunities within the ecosystem.`;
+          
+          // Record this special completion notification
+          recordLevelUpSent(project.id, 8);
+          
+          // Send a chat message with the completion notification
+          const sessionId = await getOrCreateChatSession(project.id);
+          await saveChatMessage(sessionId, levelUpMessage, true, 'ONBOARDING_COMPLETE', true);
+          
+          // Send the WebSocket message
+          ws.send(
+            JSON.stringify({
+              type: 'message',
+              content: levelUpMessage,
+              isFromAgent: true,
+              action: 'ONBOARDING_COMPLETE'
+            })
+          );
+          
+          console.log(`Project ${project.id} has completed all onboarding requirements!`);
+          return; // Return early as we don't need to do a level up
+        } else {
+          console.log(
+            `Project ${project.id} hasn't completed the Loom video requirement yet`
           );
         }
         break;
@@ -4246,6 +4338,148 @@ async function handleGetBlogpostStatus(
       })
     );
   }
+}
+
+/**
+ * Handle verification of a Loom welcome video
+ * @param ws WebSocket connection
+ * @param userId User ID
+ * @param loomVideoUrl Loom video URL to verify
+ */
+async function handleVerifyLoomVideo(
+  ws: WebSocket,
+  userId: string,
+  loomVideoUrl: string
+): Promise<void> {
+  try {
+    if (!userId) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'User ID is required',
+        })
+      );
+      return;
+    }
+
+    if (!loomVideoUrl) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Loom video URL is required',
+        })
+      );
+      return;
+    }
+
+    // Validate URL format - check if it's a Loom URL
+    if (!loomVideoUrl.includes('loom.com/share/')) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Invalid Loom video URL format. It should contain "loom.com/share/"',
+        })
+      );
+      return;
+    }
+
+    // Get the Twitter record for this user
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    if (!twitterRecord) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          message: 'Twitter account not connected. Please connect your Twitter account first.',
+        })
+      );
+      return;
+    }
+
+    // Update the Twitter record with Loom video URL and date
+    await prisma.twitter.update({
+      where: { id: twitterRecord.id },
+      data: {
+        loomVideoUrl: loomVideoUrl,
+        loomVideoDate: new Date(),
+      } as any
+    });
+
+    // Get or create chat session
+    const sessionId = await getOrCreateChatSession(userId);
+
+    // Save verification message to chat
+    const verificationMessage = `Loom welcome video successfully verified! URL: ${loomVideoUrl}`;
+    await saveChatMessage(sessionId, verificationMessage, true, 'LOOM_VIDEO_VERIFIED', true);
+
+    // Get the updated Twitter record
+    const updatedTwitterRecord = await prisma.twitter.findUnique({
+      where: { projectId: userId }
+    });
+
+    // Send success response
+    ws.send(
+      JSON.stringify({
+        type: 'loom_video_verified',
+        success: true,
+        loomVideo: {
+          url: updatedTwitterRecord?.loomVideoUrl,
+          date: updatedTwitterRecord?.loomVideoDate,
+        },
+        message: verificationMessage
+      })
+    );
+
+    // Also send as a chat message
+    ws.send(
+      JSON.stringify({
+        type: 'message',
+        content: `## Welcome Loom Video Verified! 🎉\n\nYour welcome video has been successfully verified. This completes another one of your Level 7 requirements.\n\nLoom Video URL: ${loomVideoUrl}\nVerified on: ${new Date().toLocaleDateString()}`,
+        isFromAgent: true,
+        action: 'LOOM_VIDEO_VERIFIED'
+      })
+    );
+
+    // Check if user now meets all Level 7 requirements and should level up
+    const project = await ProjectService.getById(userId);
+    if (project) {
+      await checkAndPerformLevelUp(project, ws);
+    }
+
+  } catch (error) {
+    console.error('Error verifying Loom video:', error);
+    ws.send(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to verify Loom video',
+      })
+    );
+  }
+}
+
+/**
+ * Extract Loom video URLs from a message
+ * @param message User message
+ * @returns Array of Loom video URLs found in the message
+ */
+function extractLoomUrls(message: string): string[] {
+  const loomUrls: string[] = [];
+  
+  // Regular expression to match Loom URLs
+  const loomRegex = /https?:\/\/(www\.)?loom\.com\/share\/[a-zA-Z0-9]+/g;
+  
+  // Find all matches
+  const matches = message.match(loomRegex);
+  
+  if (matches) {
+    // Filter out duplicates
+    const uniqueUrls = [...new Set(matches)];
+    loomUrls.push(...uniqueUrls);
+  }
+  
+  return loomUrls;
 }
 
 export {
