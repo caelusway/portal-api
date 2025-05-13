@@ -61,21 +61,30 @@ router.post('/accept', async (req: any, res: any) => {
     if (!invite) {
       return res.status(404).json({ error: 'Invitation not found' });
     }
-    
-    if (invite.status === 'accepted') {
-      return res.status(200).json({ message: 'Invitation has already been used or revoked' });
-    }
+  
     
     if (invite.expiresAt < new Date()) {
       return res.status(400).json({ error: 'Invitation has expired' });
     }
-    
-    // Accept the invitation - this adds the user as a project member
+
+        // Accept the invitation - this adds the user as a project member
     const result = await ProjectInviteService.accept(token, userId);
     
+
+    if (invite.status === 'accepted') {
+      return res.json({ 
+        success: true,
+        message: 'Project joined successfully',
+        projectId: invite.projectId,
+        projectMember: result.projectMember
+      });
+    }
+    
+
     // Return the project details for the frontend to navigate
     return res.json({ 
       message: 'Project joined successfully',
+      success: true,
       projectId: invite.projectId,
       projectMember: result.projectMember
     });

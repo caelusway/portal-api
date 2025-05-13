@@ -475,7 +475,7 @@ export const ProjectInviteService = {
       });
 
       if (!invite) throw new Error('Invite not found.');
-      if (invite.status !== 'pending') throw new Error('Invite already used or revoked.');
+      if (invite.status === 'accepted') return invite;
       if (invite.expiresAt < new Date()) throw new Error('Invite has expired.');
 
       // 2. Check if user is already a member
