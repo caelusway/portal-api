@@ -19,7 +19,7 @@ router.get('/verify', async (req: any, res: any) => {
     // Verify the token
     const invite = await ProjectInviteService.verifyToken(token);
     
-    if (!invite) {
+    if (!invite || invite.expiresAt < new Date()) {
       return res.status(400).json({ 
         valid: false,
         error: 'Invalid or expired invitation token'
@@ -27,7 +27,7 @@ router.get('/verify', async (req: any, res: any) => {
     }
     
     // Return the relevant project and inviter info
-    return res.json({ 
+    return res.status(200).json({ 
       valid: true,
       projectName: invite.project.name,
       projectDescription: invite.project.description,
@@ -62,8 +62,8 @@ router.post('/accept', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Invitation not found' });
     }
     
-    if (invite.status !== 'pending') {
-      return res.status(400).json({ error: 'Invitation has already been used or revoked' });
+    if (invite.status === 'accepted') {
+      return res.status(200).json({ message: 'Invitation has already been used or revoked' });
     }
     
     if (invite.expiresAt < new Date()) {

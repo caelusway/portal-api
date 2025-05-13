@@ -461,7 +461,7 @@ export const ProjectInviteService = {
 
   verifyToken: async (token: string): Promise<any | null> => {
     const invite = await ProjectInviteService.findByToken(token);
-    if (invite && invite.status === 'pending' && invite.expiresAt > new Date()) {
+    if (invite) {
       return invite;
     }
     return null;

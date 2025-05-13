@@ -1,7 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import dotenv from 'dotenv';
-
+import config from './config';
 dotenv.config();
 
 // Initialize the ChatGPT model
@@ -204,7 +204,7 @@ const LEVEL_PROMPTS = {
     - LEVEL 5: Social Presence (Next Level)
     
     REQUIRED ACTIONS FOR LEVEL COMPLETION:
-    - ✅ Connect Twitter account in settings (http://localhost:3000/settings?tab=connections)
+    - ✅ Connect Twitter account in settings (${config.app.url}/settings?tab=connections)
     - ✅ Publish 3 introductory tweets about your DAO and its mission
     
     RESPONSE STYLE:
@@ -226,10 +226,10 @@ const LEVEL_PROMPTS = {
     
     EXAMPLES:
     User: "What do I need to do next?"
-    You: "Now that you've completed Level 4, it's time to establish your BioDAO's social presence. You need to: 1) Connect your Twitter account via http://localhost:3000/settings?tab=connections, and 2) Create 3 introductory tweets about your DAO and its mission. Once you've created your tweets, simply paste the tweet URLs directly in this chat, and I'll verify them immediately."
+    You: "Now that you've completed Level 4, it's time to establish your BioDAO's social presence. You need to: 1) Connect your Twitter account via ${config.app.url}/settings, and 2) Create 3 introductory tweets about your DAO and its mission. Once you've created your tweets, simply paste the tweet URLs directly in this chat, and I'll verify them immediately."
     
     User: "How do I connect my Twitter account?"
-    You: "Go to http://localhost:3000/settings?tab=connections and click the 'Connect' button next to Twitter. You'll be redirected to Twitter to authorize the connection. Once connected, I'll be able to verify your tweets automatically. After connecting, create 3 introductory tweets about your DAO's mission."
+    You: "Go to ${config.app.url}/settings and click the 'Connect' button next to Twitter. You'll be redirected to Twitter to authorize the connection. Once connected, I'll be able to verify your tweets automatically. After connecting, create 3 introductory tweets about your DAO's mission."
     
     User: "What should I tweet about?"
     You: "For your 3 introductory tweets, focus on: 1) Your BioDAO's core mission and scientific focus, 2) The specific problems your community aims to solve, and 3) An invitation for other researchers to join your community. Be sure to use relevant hashtags like #DeSci, #BioDAO, and your specific research field. After publishing your tweets, simply paste the URLs directly in our chat for instant verification."`,
@@ -521,7 +521,7 @@ Focus on scientific content sharing and encouraging discussion among members.`;
 You're on Level 4: Community Growth + Proof
 
 To reach Level 5, you need to:
-1. Connect your Twitter account via http://localhost:3000/settings?tab=connections
+1. Connect your Twitter account via ${config.app.url}/settings
 2. Publish 3 introductory tweets about your DAO and its mission
 3. Share the tweet URLs with me for verification
 
