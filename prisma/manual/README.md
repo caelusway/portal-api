@@ -70,4 +70,70 @@ This script uses raw SQL queries to avoid schema conflicts between the old and n
 Ensure that:
 1. The database URLs are correctly formatted
 2. The user has sufficient permissions on both databases
-3. Network access is available to both database servers 
+3. Network access is available to both database servers
+
+# Database Migration to Supabase
+
+This directory contains scripts for database backup and migration to Supabase.
+
+## Migration Script
+
+The `migrate-to-supabase.ts` script provides an all-in-one solution for migrating your PostgreSQL database to Supabase.
+
+### Prerequisites
+
+- Node.js and TypeScript installed
+- PostgreSQL client tools installed (`pg_dump` and `psql` commands available)
+- `.env` file with proper database connection strings:
+  - `DATABASE_URL`: Source PostgreSQL database connection string
+  - `SUPABASE_DB_URL`: Target Supabase database connection string
+
+### Usage
+
+Run the script with:
+
+```bash
+# Install dependencies if needed
+npm install dotenv @prisma/client
+
+# Run with ts-node
+npx ts-node prisma/manual/migrate-to-supabase.ts [chunkSize]
+```
+
+Optional parameters:
+- `chunkSize`: Number of SQL lines to process in each chunk (default: 5000)
+
+### What the Script Does
+
+1. **Backup Creation**: Creates a backup of your source database using `pg_dump` with options optimized for Supabase compatibility.
+2. **Smart Import**: Analyzes the backup file size and chooses the best import strategy:
+   - For small files (<8MB): Direct import
+   - For large files: Splits into manageable chunks for better performance
+3. **Error Handling**: Provides detailed error messages if any step fails
+4. **Progress Reporting**: Shows real-time progress during the migration
+5. **Cleanup**: Automatically removes temporary files after completion
+
+### Connection String Format
+
+Both connection strings should be in PostgreSQL format:
+```
+postgresql://username:password@hostname:port/database
+```
+
+For Supabase, the connection string typically looks like:
+```
+postgres://postgres:password@db.xxxxxxxxxxxxxxxxxxxx.supabase.co:5432/postgres
+```
+
+### Troubleshooting
+
+- **Permission Errors**: Ensure you have the necessary permissions to both databases
+- **Missing Tools**: Confirm that `pg_dump` and `psql` are installed and available in your PATH
+- **Connection Issues**: Verify that both database URLs are correct and accessible from your network
+- **Large Databases**: For very large databases, consider increasing the chunk size for better performance
+
+### Considerations
+
+- The migration process can take some time for large databases
+- The script temporarily disables foreign key constraints during import to handle circular references
+- All schema objects are imported without owners or permissions (Supabase manages these aspects) 

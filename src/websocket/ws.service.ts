@@ -812,7 +812,8 @@ async function handleInitialConnection(ws: WebSocket, project: any): Promise<voi
       // Send personalized welcome message
       const welcomeMessage = `Congratulations, ${userName}!
 We've just begun the process of bringing ${projectName} to life.
-Your journey will be guided by the Portal & your project will level up as you progress along the BioDAO building path.`;
+Your journey will be guided by the Portal & your project will level up as you progress along the BioDAO building path.
+You can proudly announce that you're participating via the BIO portal as your project takes shape.`;
 
       await ChatMessageService.saveMessage(sessionId, welcomeMessage, true, 'WELCOME', true);
 
