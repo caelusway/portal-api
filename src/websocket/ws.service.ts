@@ -25,6 +25,12 @@ const botInstallNotificationSent = new Map<string, boolean>();
 // Add a map to track recent level-up notifications to prevent duplicates
 const recentLevelUpsByUser = new Map<string, Map<number, number>>();
 
+// Session type constants
+const SESSION_TYPES = {
+  CORE_AGENT: 'coreagent',
+  COACHING_AGENT: 'coachingagent'
+};
+
 /**
  * Gets an existing chat session or creates a new one for a user
  * @param userId User ID
@@ -36,6 +42,7 @@ async function getOrCreateChatSession(userId: string): Promise<string> {
     const existingSession = await prisma.chatSession.findFirst({
       where: {
         projectId: userId,
+        sessionType: SESSION_TYPES.CORE_AGENT
       },
       orderBy: {
         updatedAt: 'desc',
@@ -56,6 +63,7 @@ async function getOrCreateChatSession(userId: string): Promise<string> {
     const newSession = await prisma.chatSession.create({
       data: {
         projectId: userId,
+        sessionType: SESSION_TYPES.CORE_AGENT,
         updatedAt: new Date(),
       },
     });
@@ -117,6 +125,12 @@ function initWebSocketServer(server: http.Server): WebSocketServer {
       try {
         const data = JSON.parse(message.toString());
         console.log('Received message type:', data.type);
+
+        // Skip messages with coaching_ prefix - these should be handled by the coaching agent only
+        if (data.type && data.type.startsWith('coaching_')) {
+          console.log(`Ignoring coaching agent message type: ${data.type}`);
+          return;
+        }
 
         switch (data.type) {
           case 'auth': {
@@ -1222,7 +1236,7 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
         return [
           `**Congratulations on reaching Level 4!** \nTime to establish your BioDAO's social presence.\n`,
           `**Next Step: Connect Your Twitter Account**\n`,
-          `1. Go to ${config.app.url}/settings?tab=connections`,
+          `1. Go to ${config.app.url}/settings`,
           `2. Click "Connect" next to Twitter`,
           `3. Authorize the connection with your BioDAO's Twitter account\n`,
           `After connecting, you'll need to publish 3 introductory tweets about your DAO and its mission.\n`,

@@ -7,6 +7,7 @@ import apiRoutes from './routes';
 import config from './config';
 import { initWebSocketServer } from './websocket/ws.service';
 import { initDiscordBot } from './discord-bot';
+import { initCoachingWebSocket } from './coaching-agent/init-websocket';
 import { validateApiKey } from './middleware/apiKey.middleware';
 
 // Create express app
@@ -32,6 +33,9 @@ app.use(bodyParser.json());
 
 // Initialize WebSocket server
 const wss = initWebSocketServer(server);
+
+// Initialize Coaching Agent WebSocket server
+initCoachingWebSocket(server);
 
 // Initialize Discord bot if token is available
 if (config.discord.botToken) {

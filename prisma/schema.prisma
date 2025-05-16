@@ -77,6 +77,10 @@ model Project {
   Twitter              Twitter?         // Add relation to Twitter model
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
+  dkgFiles             DKGFile[]        // Added relation to DKGFile
+
+  @@index([privyId])
+  @@index([referralCode])
 }
 
 model NFT {
@@ -156,14 +160,15 @@ model Discord {
   updatedAt         DateTime  @updatedAt
 }
 
-// Updated ChatSession Model
+// Updated ChatSession Model with sessionType
 model ChatSession {
-  id        String        @id @default(uuid())
-  projectId String
-  messages  ChatMessage[]
-  project   Project       @relation(fields: [projectId], references: [id])
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id          String        @id @default(uuid())
+  projectId   String
+  sessionType String?       @default("coreagent") // "coreagent" or "coachingagent"
+  messages    ChatMessage[]
+  project     Project       @relation(fields: [projectId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
 
 model ChatMessage {
@@ -232,4 +237,24 @@ model Twitter {
   
   // Relation to Project
   project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// Add the new DKGFile model, for example, after the Project model or at the end of the file.
+// If you have a specific place you prefer, adjust accordingly.
+// For this example, I'm adding it after the Project model if other models follow, 
+// or it can be placed before the enum definitions if those are at the very end.
+// Assuming it's placed logically with other models:
+
+model DKGFile {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hash      String  // The DKG hash (UAL)
+  filename  String? // Original filename of the uploaded PDF
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }

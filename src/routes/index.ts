@@ -8,6 +8,7 @@ import referralRoutes from './referral';
 import inviteRoutes from './invite.routes';
 import userRoutes from './user.routes';
 import twitterRoutes from './twitter.routes';
+import coachingRoutes from './coaching.routes';
 
 const router = express.Router();
 
@@ -26,5 +27,6 @@ router.use('/referral', referralRoutes);
 router.use('/invites', inviteRoutes);
 router.use('/users', userRoutes);
 router.use('/twitter', twitterRoutes);
+router.use('/coaching', coachingRoutes);
 
 export default router;

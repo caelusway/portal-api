@@ -1,12 +1,13 @@
 import express from 'express';
 import TwitterService from '../services/twitter.service';
+import { ProjectService } from '../services/db.service';
 
 
 const router = express.Router();
 
 /**
- * @route GET /api/twitter
- * @desc Get Twitter information for the current user
+ * @route GET /api/twitter/:projectId
+ * @desc Get all Twitter information for the current project
  * @access Private
  */
 router.get('/:projectId', async (req, res) => {
@@ -16,6 +17,115 @@ router.get('/:projectId', async (req, res) => {
     res.json(twitterData || { connected: false });
   } catch (error) {
     console.error('Error getting Twitter data:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route GET /api/twitter/:projectId/profile-info
+ * @desc Get Twitter profile info (connected, username, introTweetsCount)
+ * @access Private
+ */
+router.get('/:projectId/profile-info', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const twitterData = await TwitterService.getByProjectId(projectId);
+
+    if (!twitterData) {
+      return res.json({
+        connected: false,
+        username: '',
+        introTweetsCount: 0,
+      });
+    }
+
+    res.json({
+      connected: twitterData.connected || false,
+      username: twitterData.twitterUsername || '',
+      introTweetsCount: twitterData.introTweetsCount || 0,
+    });
+  } catch (error) {
+    console.error('Error getting Twitter profile info:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route GET /api/twitter/:projectId/community-progress
+ * @desc Get community progress stats (verifiedScientists, twitterSpaceHosted, twitterSpaceUrl)
+ * @access Private
+ */
+router.get('/:projectId/community-progress', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const twitterData = await TwitterService.getByProjectId(projectId);
+    const projectData = await ProjectService.getById(projectId);
+
+    const twitterSpaceUrl = twitterData?.twitterSpaceUrl || '';
+    const twitterSpaceHosted = !!twitterSpaceUrl;
+    // Assuming 'verifiedScientistCount' is a field on the project model, might need casting or safe access
+    const verifiedScientists = (projectData as any)?.verifiedScientistCount || 0;
+
+
+    res.json({
+      verifiedScientists: verifiedScientists,
+      twitterSpaceHosted: twitterSpaceHosted,
+      twitterSpaceUrl: twitterSpaceUrl,
+    });
+  } catch (error) {
+    console.error('Error getting community progress info:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route GET /api/twitter/:projectId/vision-content
+ * @desc Get vision content URLs (blogpostUrl, twitterThreadUrl)
+ * @access Private
+ */
+router.get('/:projectId/vision-content', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const twitterData = await TwitterService.getByProjectId(projectId);
+
+    if (!twitterData) {
+      return res.json({
+        blogpostUrl: '',
+        twitterThreadUrl: '',
+      });
+    }
+
+    res.json({
+      blogpostUrl: twitterData.blogpostUrl || '',
+      twitterThreadUrl: twitterData.twitterThreadUrl || '',
+    });
+  } catch (error) {
+    console.error('Error getting vision content info:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/**
+ * @route GET /api/twitter/:projectId/completion-data
+ * @desc Get completion data (loomVideoUrl)
+ * @access Private
+ */
+router.get('/:projectId/completion-data', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const twitterData = await TwitterService.getByProjectId(projectId);
+
+    if (!twitterData) {
+      return res.json({
+        loomVideoUrl: '',
+      });
+    }
+
+    res.json({
+      loomVideoUrl: twitterData.loomVideoUrl || '',
+    });
+  } catch (error) {
+    console.error('Error getting completion data:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -29,6 +29,7 @@
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "discord.js": "^14.18.0",
+    "dkg.js": "^8.0.12",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "form-data": "^4.0.1",
@@ -39,6 +40,7 @@
     "pdf-parse": "^1.1.1",
     "pg": "^8.15.6",
     "viem": "^2.27.2",
+    "web3": "^4.16.0",
     "ws": "^8.14.2",
     "zod": "^3.24.4"
   },
@@ -75,5 +77,6 @@
       "json",
       "node"
     ]
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

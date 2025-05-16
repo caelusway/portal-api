@@ -13,6 +13,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   Interaction,
+  Attachment,
 } from 'discord.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -31,6 +32,7 @@ import { activeConnections } from './websocket/ws.service';
 // @ts-ignore
 import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
+
 dotenv.config();
 
 const PORTAL_API_URL = process.env.PORTAL_API_URL || 'http://localhost:3001';
@@ -1375,5 +1377,4 @@ async function assignContributorRole(
     return false;
   }
 }
-
 

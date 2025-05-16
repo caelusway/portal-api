@@ -1137,9 +1137,9 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
       }
     } else {
       // This is a connection update
-      if (!username) {
+      if (!username || !platformId) {
         return res.status(400).json({
-          error: 'Username is required for connection',
+          error: 'Username and Platform ID are required for connection',
         });
       }
       
@@ -1186,16 +1186,22 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
     if (platform === 'twitter' && !isDisconnecting) {
       try {
         // Find the user's project
+        console.log(`[Social Connections] Attempting to find project for BioUser ID: ${id}`);
         const projectMember = await prisma.projectMember.findFirst({
           where: { bioUserId: id },
           include: { project: true }
         });
+
+        console.log(`[Social Connections] projectMember result for BioUser ID ${id}:`, JSON.stringify(projectMember, null, 2));
         
         if (projectMember && projectMember.project) {
+          console.log(`[Social Connections] Found project (${projectMember.projectId}) for BioUser ID: ${id}. Syncing Twitter record.`);
           // Check if Twitter record already exists
           const existingTwitter = await prisma.twitter.findUnique({
             where: { projectId: projectMember.projectId }
           });
+
+          
           
           if (existingTwitter) {
             // Update existing Twitter record
@@ -1219,6 +1225,8 @@ router.put('/:id/social-connections', async (req: any, res: any) => {
               }
             });
           }
+        } else {
+          console.log(`[Social Connections] No project found for BioUser ID: ${id} OR projectMember.project is null. Skipping project Twitter record sync.`);
         }
       } catch (err) {
         console.error('Error syncing project Twitter record:', err);

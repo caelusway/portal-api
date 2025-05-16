@@ -70,6 +70,7 @@ router.get('/privy/:privyId', async (req: any, res: any) => {
       include: {
         Discord: true,
         NFTs: true,
+        Twitter: true,
       },
     });
 
@@ -286,14 +287,13 @@ router.get('/:projectId/discord', async (req: any, res: any) => {
 });
 
 /**
- * PUT /api/projects/:projectId/twitter
- * Update Twitter information for a project
+ * POST /api/projects/:projectId/twitter
+ * Create or update Twitter information for a project
  */
-router.put('/:projectId/twitter', async (req: any, res: any) => {
+router.post('/:projectId/twitter', async (req: any, res: any) => {
   try {
     const { projectId } = req.params;
     const twitterData = req.body;
-    const { userId } = req.body;
 
     if (!projectId) {
       return res.status(400).json({ error: 'Project ID is required' });
@@ -310,7 +310,7 @@ router.put('/:projectId/twitter', async (req: any, res: any) => {
       where: { projectId },
     });
 
-    
+    let wasExisting = true;
     if (twitterRecord) {
       // Update existing Twitter record
       twitterRecord = await prisma.twitter.update({
@@ -321,7 +321,98 @@ router.put('/:projectId/twitter', async (req: any, res: any) => {
         },
       });
     } else {
+      wasExisting = false;
       // Create new Twitter record
+      twitterRecord = await prisma.twitter.create({
+        data: {
+          projectId,
+          ...twitterData,
+        },
+      });
+    }
+
+    // After creating/updating Twitter info, check for possible level-up
+    if (project.level === 4 && twitterRecord.connected && twitterRecord.introTweetsCount >= 3) {
+      // Update project to level 5 if all requirements are met
+      await ProjectService.update(projectId, { level: 5 });
+    }
+
+    return res.status(wasExisting ? 200 : 201).json(twitterRecord);
+  } catch (error) {
+    console.error('Error creating/updating Twitter info via POST:', error);
+    return res.status(500).json({ error: 'Failed to create/update Twitter info' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/twitter
+ * Get Twitter information for a project
+ */
+router.get('/:projectId/twitter', async (req: any, res: any) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    // Verify the project exists
+    const project = await ProjectService.getById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Find existing Twitter record
+    const twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId },
+    });
+
+    if (!twitterRecord) {
+      return res.status(404).json({ error: 'Twitter information not found for this project' });
+    }
+
+    return res.json(twitterRecord);
+  } catch (error) {
+    console.error('Error fetching Twitter info:', error);
+    return res.status(500).json({ error: 'Failed to fetch Twitter info' });
+  }
+});
+
+/**
+ * PUT /api/projects/:projectId/twitter
+ * Update Twitter information for a project
+ */
+router.put('/:projectId/twitter', async (req: any, res: any) => {
+  try {
+    const { projectId } = req.params;
+    const twitterData = req.body;
+
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID is required' });
+    }
+
+    // Verify the project exists
+    const project = await ProjectService.getById(projectId);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // Find existing Twitter record or create a new one
+    let twitterRecord = await prisma.twitter.findUnique({
+      where: { projectId },
+    });
+
+    if (twitterRecord) {
+      // Update existing Twitter record
+      twitterRecord = await prisma.twitter.update({
+        where: { id: twitterRecord.id },
+        data: {
+          ...twitterData,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      // Create new Twitter record if it doesn't exist (PUT can create)
       twitterRecord = await prisma.twitter.create({
         data: {
           projectId,
@@ -338,7 +429,7 @@ router.put('/:projectId/twitter', async (req: any, res: any) => {
 
     return res.json(twitterRecord);
   } catch (error) {
-    console.error('Error updating Twitter info:', error);
+    console.error('Error updating Twitter info via PUT:', error);
     return res.status(500).json({ error: 'Failed to update Twitter info' });
   }
 });

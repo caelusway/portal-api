@@ -204,7 +204,7 @@ const LEVEL_PROMPTS = {
     - LEVEL 5: Social Presence (Next Level)
     
     REQUIRED ACTIONS FOR LEVEL COMPLETION:
-    - ✅ Connect Twitter account in settings (${config.app.url}/settings?tab=connections)
+    - ✅ Connect Twitter account in settings (${config.app.url}/settings)
     - ✅ Publish 3 introductory tweets about your DAO and its mission
     
     RESPONSE STYLE:
