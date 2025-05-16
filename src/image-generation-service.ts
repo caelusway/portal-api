@@ -66,7 +66,7 @@ export async function generateIdeaNFTImage(
     }
 
     // Get image URL from response
-    const imageUrl = response.data[0].url;
+    const imageUrl = response.data?.[0]?.url;
     if (!imageUrl) {
       throw new Error('Failed to generate image: No URL returned');
     }
@@ -117,7 +117,7 @@ export async function generateVisionNFTImage(projectId: string, vision: string):
     }
 
     // Get image URL from response
-    const imageUrl = response.data[0].url;
+    const imageUrl = response.data?.[0]?.url;
     if (!imageUrl) {
       throw new Error('Failed to generate image: No URL returned');
     }
