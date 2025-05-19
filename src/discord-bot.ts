@@ -34,6 +34,7 @@ import { activeConnections } from './websocket/ws.service';
 // @ts-ignore
 import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
+import dbService from './services/db.service';
 
 dotenv.config();
 
@@ -382,11 +383,15 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
     console.log(`[MEMBER_SYNC] Member count mismatch for ${guild.name}: DB=${dbMemberCount}, Actual=${currentMemberCount}. Updating...`);
     
     try {
-      // Update member count in database
+      // Update memberCount in database
       console.log(`[DEBUG] Attempting to update memberCount in database. Record ID: ${discordRecord.id}`);
+      // Fixed update - explicitly specify only the fields we want to update
+      // This prevents issues with reserved keywords like 'new'
+      const dataForUpdate: { memberCount: number } = { memberCount: currentMemberCount };
+      console.log(`[MEMBER_SYNC] Prisma update call details for memberCount. Guild ID: ${guild.id}, Record ID: ${discordRecord.id}, Where: ${JSON.stringify({ id: discordRecord.id })}, Data: ${JSON.stringify(dataForUpdate)}`);
       const updateResult = await prisma.discord.update({
         where: { id: discordRecord.id },
-        data: { memberCount: currentMemberCount }
+        data: dataForUpdate
       });
       
       console.log(`[MEMBER_SYNC] Updated member count in database for ${guild.name} to ${currentMemberCount}`);
@@ -579,12 +584,19 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
           // Update database
           console.log(`[DEBUG] Updating DB with processed messages (${totalProcessedMessages}) and papers (${totalPapersFound})`);
           try {
+            
+
+
+            console.log(`[DEBUG] Updating DBss with processed messages (${stats.messageCount}) and papers (${stats.papersShared})`);
+            console.log(`[DEBUG] Discord record ID: ${discordRecord.id}`);
+            // Fixed update - explicitly specify only the fields we want to update
+            // This prevents issues with reserved keywords like 'new'
             const updateResult = await prisma.discord.update({
               where: { id: discordRecord.id },
               data: {
                 messagesCount: stats.messageCount,
                 papersShared: stats.papersShared
-              }
+              } // Comment moved outside: ONLY include the specific fields we want to update
             });
             console.log(`[DEBUG] DB update result: ${JSON.stringify({
               id: updateResult.id,
@@ -884,9 +896,13 @@ client.on(Events.MessageCreate, async (message: Message) => {
       });
       
       if (discordRecord) {
+        // Fixed update - explicitly specify only the fields we want to update
+        // This prevents issues with reserved keywords like 'new'
         await prisma.discord.update({
-              where: { id: discordRecord.id },
-          data: { papersShared: updatedStats.papersShared }
+          where: { id: discordRecord.id },
+          data: { 
+            papersShared: updatedStats.papersShared 
+          } // Comment moved outside: ONLY include the specific fields we want to update
         });
         console.log(`[PAPER_TRACK] Updated paper count in DB for guild ${guildId}`);
       }
@@ -916,9 +932,13 @@ client.on(Events.MessageCreate, async (message: Message) => {
       });
       
       if (discordRecord) {
+        // Fixed update - explicitly specify only the fields we want to update
+        // This prevents issues with reserved keywords like 'new'
         await prisma.discord.update({
           where: { id: discordRecord.id },
-          data: { messagesCount: updatedStats.messageCount }
+          data: { 
+            messagesCount: updatedStats.messageCount 
+          } // Comment moved outside: ONLY include the specific fields we want to update
         });
         console.log(`[MESSAGE_TRACK] Updated message count in DB for guild ${guildId}`);
       }

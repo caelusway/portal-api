@@ -1,6 +1,103 @@
 # Google Sheets Sync Service
 
-This service automatically syncs PostgreSQL data with Google Sheets. It can sync both project and Discord server information.
+This service syncs BioDAO project and Discord server data to Google Sheets. It provides real-time updates to a Google Sheet whenever project or Discord data changes.
+
+## Architecture Overview
+
+The system uses a two-part approach to sync data:
+
+1. **Core Sync Service** (`sheets-sync.service.ts`): Handles the actual synchronization of data to Google Sheets. This service does NOT modify the database structure.
+
+2. **Database Setup Service** (`sheets-db-setup.service.ts`): Manages database triggers and functions that automatically populate a queue whenever project or Discord data changes. This service DOES modify the database structure.
+
+## Files and Components
+
+### Core Service Files (Non-DB-Modifying)
+
+- **`sheets-sync.service.ts`**: Main service for syncing data to Google Sheets
+  - `syncProjectToSheets(projectId)`: Syncs a project and its Discord data to Google Sheets
+  - `syncDiscordToSheets(discordId)`: Syncs Discord data via its associated project
+  - `initializeSheetWithAllProjects()`: Syncs all projects to the sheet
+
+- **`initialize-sheets.ts`**: Script to manually sync projects
+  - Use to sync all projects or a specific project to Google Sheets
+  - Does NOT modify database structure
+
+### Database Setup Files (DB-Modifying)
+
+- **`sheets-db-setup.service.ts`**: Service for managing database triggers and queue
+  - `setupDatabaseTriggersAndQueue()`: Creates DB functions, triggers, and queue table
+  - `removeDatabaseTriggersAndFunctions()`: Removes DB functions and triggers
+  - `processSyncQueue(batchSize)`: Processes queue items
+
+- **`setup-sheets-db-triggers.ts`**: Script to set up or remove database triggers
+  - Use to create or remove database triggers and functions
+  - MODIFIES database structure
+
+- **`process-sheets-sync-queue.ts`**: Script to process the sync queue
+  - Use to manually process queue or run in watch mode
+  - MODIFIES queue data but not structure
+
+## How It Works
+
+1. When enabled, database triggers automatically add items to `sheets_sync_queue` when project or Discord data changes
+2. The queue processor reads from this queue and calls the sync service
+3. The sync service reads from the database and updates Google Sheets
+
+## Safety Features
+
+- Scripts require environment variables to be set to run
+- Database modification scripts have confirmation delays
+- Watch mode for queue processor has error handling to prevent crashes
+
+## Usage
+
+### To sync data without setting up database triggers
+
+```bash
+# Initialize all projects in the sheet
+INITIALIZE_SHEET=true npm run initialize-sheets
+
+# Sync a specific project
+INITIALIZE_SHEET=true npm run initialize-sheets -- --project=<project-id>
+```
+
+### To set up database triggers (one-time setup)
+
+```bash
+# Set up database triggers and queue
+SETUP_SHEETS_DB=true npm run setup-sheets-db -- --setup
+
+# Remove database triggers
+SETUP_SHEETS_DB=true npm run setup-sheets-db -- --remove
+```
+
+### To process the queue
+
+```bash
+# Process queue once
+PROCESS_SHEETS_QUEUE=true npm run process-sheets-queue
+
+# Process queue continuously (watch mode)
+PROCESS_SHEETS_QUEUE=true npm run process-sheets-queue -- --watch
+```
+
+## Configuration
+
+Set these environment variables to customize behavior:
+
+- `GOOGLE_SERVICE_ACCOUNT_CREDENTIALS`: JSON credentials for Google service account
+- `GOOGLE_SHEET_ID`: ID of the Google Sheet to sync with
+- `BATCH_SIZE`: Number of queue items to process in one batch (default: 10)
+- `WATCH_INTERVAL`: Seconds between processing attempts in watch mode (default: 60)
+
+## Important Notes
+
+1. **Database Modifications**: The `sheets-db-setup.service.ts` creates database objects including triggers, functions, and a queue table. Only run the setup script if you want these objects created.
+
+2. **Error Handling**: The system is designed to be resilient, with errors in one sync not affecting others.
+
+3. **Performance**: The trigger and queue approach ensures that syncing doesn't impact application performance.
 
 ## Features
 

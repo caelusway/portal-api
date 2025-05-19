@@ -8,8 +8,7 @@ dotenv.config();
 // --- Configuration ---
 const SERVICE_ACCOUNT_JSON_STRING = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS;
 const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
-const SHEET_NAME = 'Projects'; // Ensure this matches your sheet name
-const DISCORD_SHEET_NAME = 'Discords'; // Sheet for Discord data
+const SHEET_NAME = 'Projects'; // Combined sheet for Projects and their Discord data
 const PRIMARY_KEY_COLUMN_LETTER = 'A'; // Column letter for Primary Key in Sheets
 const PRIMARY_KEY_COLUMN_INDEX = 0; // 0-based index for the primary key column (A=0, B=1, etc.)
 const GOOGLE_TOKEN_URI = 'https://oauth2.googleapis.com/token';
@@ -32,15 +31,43 @@ async function getGoogleAccessToken(): Promise<string> {
     throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable');
   }
   
-  const creds = JSON.parse(SERVICE_ACCOUNT_JSON_STRING);
-  const client = new JWT({
-    email: creds.client_email,
-    key: creds.private_key,
-    scopes: GOOGLE_SHEETS_SCOPES,
-  });
+  try {
+    // Try to parse the service account credentials JSON
+    let creds;
+    try {
+      creds = JSON.parse(SERVICE_ACCOUNT_JSON_STRING);
+    } catch (jsonError) {
+      // Provide detailed error about the JSON parsing issue
+      const errorMsg = jsonError instanceof Error ? jsonError.message : String(jsonError);
+      console.error('Failed to parse Google service account credentials JSON:', errorMsg);
+      
+      // Show a snippet of the credentials string to help diagnose (first 20 chars)
+      const credSnippet = SERVICE_ACCOUNT_JSON_STRING.length > 20
+        ? SERVICE_ACCOUNT_JSON_STRING.substring(0, 20) + '...'
+        : SERVICE_ACCOUNT_JSON_STRING;
+      console.error('Service account credentials snippet:', credSnippet);
+      
+      throw new Error(`Invalid Google service account credentials JSON: ${errorMsg}. Check that your GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable contains valid JSON.`);
+    }
+    
+    // Check if the parsed credentials have the required fields
+    if (!creds.client_email || !creds.private_key) {
+      throw new Error('Google service account credentials are missing required fields (client_email and/or private_key)');
+    }
+    
+    const client = new JWT({
+      email: creds.client_email,
+      key: creds.private_key,
+      scopes: GOOGLE_SHEETS_SCOPES,
+    });
 
-  const token = await client.authorize();
-  return token.access_token || '';
+    const token = await client.authorize();
+    return token.access_token || '';
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Error getting Google access token:', errorMsg);
+    throw new Error(`Failed to get Google access token: ${errorMsg}`);
+  }
 }
 
 /**
@@ -84,60 +111,53 @@ async function findRowIndexById(accessToken: string, id: string, sheetName: stri
 }
 
 /**
- * Format a project record into a row for Google Sheets
+ * Format a project record into a row for Google Sheets, including its Discord data if available
  * IMPORTANT: The order of values must match your Google Sheet columns
  */
-function formatProjectToRow(record: any): any[] {
+function formatProjectToRow(record: any, discordRecord: any = null): any[] {
   if (!record) {
     console.warn("formatProjectToRow received null or undefined record. Returning empty array.");
     return [];
   }
 
-  // The order of fields here MUST match the order of columns in your Google Sheet
-  return [
+  // Start with project data
+  const rowData = [
     record.id,
     record.level,
-    record.project_name,
-    record.project_description,
-    record.project_vision,
-    record.project_links,
-    record.referral_source,
-    record.scientific_references,
-    record.credential_links,
-    record.team_members,
+    record.projectName,
+    record.projectDescription,
+    record.projectVision,
+    record.projectLinks,
+    record.referralSource,
+    record.scientificReferences,
+    record.credentialLinks,
+    record.teamMembers,
     record.motivation,
     record.progress,
-    record.created_at,
-    record.updated_at,
-    record.referral_code,
-    record.referred_by_id
+    record.referralCode,
+    record.referredById
   ];
-}
 
-/**
- * Format a Discord record into a row for Google Sheets
- * IMPORTANT: The order of values must match your Google Sheet columns
- */
-function formatDiscordToRow(record: any): any[] {
-  if (!record) {
-    console.warn("formatDiscordToRow received null or undefined record. Returning empty array.");
-    return [];
+  // Add Discord data if available
+  if (discordRecord) {
+    rowData.push(
+      discordRecord.id,
+      discordRecord.serverId,
+      discordRecord.serverName,
+      discordRecord.invitationUrl,
+      discordRecord.messagesCount,
+      discordRecord.papersShared,
+      discordRecord.qualityScore,
+      discordRecord.memberCount
+    );
+  } else {
+    // Add empty values for Discord columns
+    for (let i = 0; i < 8; i++) { // Reduced from 10 to 8 Discord fields (removed createdAt/updatedAt)
+      rowData.push("");
+    }
   }
 
-  // The order of fields here MUST match the order of columns in your Google Sheet
-  return [
-    record.id,
-    record.server_id,
-    record.server_name,
-    record.project_id,
-    record.invitation_url,
-    record.messages_count,
-    record.papers_shared,
-    record.quality_score,
-    record.member_count,
-    record.created_at,
-    record.updated_at
-  ];
+  return rowData;
 }
 
 /**
@@ -145,11 +165,11 @@ function formatDiscordToRow(record: any): any[] {
  */
 export async function syncProjectToSheets(projectId: string): Promise<string> {
   try {
-    console.log(`Syncing project ${projectId} to Google Sheets`);
+    console.log(`Syncing project ${projectId} to Google Sheets with Discord data`);
     
-    // Fetch project data from PostgreSQL
+    // Fetch project data from PostgreSQL - Fix table name case sensitivity with quotes
     const projectResult = await pool.query(
-      'SELECT * FROM project WHERE id = $1',
+      'SELECT * FROM "Project" WHERE id = $1',
       [projectId]
     );
     
@@ -158,10 +178,25 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
     }
     
     const projectRecord = projectResult.rows[0];
+    
+    // Fetch associated Discord data (if any)
+    let discordRecord = null;
+    const discordResult = await pool.query(
+      'SELECT * FROM "Discord" WHERE "projectId" = $1 LIMIT 1',
+      [projectId]
+    );
+    
+    if (discordResult.rows.length > 0) {
+      discordRecord = discordResult.rows[0];
+      console.log(`Found associated Discord server: ${discordRecord.serverName} (${discordRecord.id}) for project ${projectId}`);
+    } else {
+      console.log(`No Discord server found for project ${projectId}`);
+    }
+    
     const accessToken = await getGoogleAccessToken();
     
-    // Format the project data for Google Sheets
-    const rowData = formatProjectToRow(projectRecord);
+    // Format the project data with Discord data for Google Sheets
+    const rowData = formatProjectToRow(projectRecord, discordRecord);
     if (rowData.length === 0) {
       return `Formatted project data is empty for ID: ${projectId}. Sync skipped.`;
     }
@@ -183,7 +218,7 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       
-      return `Updated row ${rowIndex} in sheet for project ID: ${projectId}`;
+      return `Updated row ${rowIndex} in sheet for project ID: ${projectId} with Discord data`;
     } else {
       // Row not found, create it
       console.log(`Row for project ID ${projectId} not found. Creating new row.`);
@@ -195,7 +230,7 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       
-      return `Created new row in sheet for project ID: ${projectId}`;
+      return `Created new row in sheet for project ID: ${projectId} with Discord data`;
     }
   } catch (error) {
     console.error(`Error syncing project ${projectId} to sheets:`, error);
@@ -208,11 +243,11 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
  */
 export async function syncDiscordToSheets(discordId: string): Promise<string> {
   try {
-    console.log(`Syncing Discord ${discordId} to Google Sheets`);
+    console.log(`Syncing Discord ${discordId} to Google Sheets by updating project row`);
     
-    // Fetch Discord data from PostgreSQL
+    // Fetch Discord data from PostgreSQL - Fix table name case sensitivity with quotes
     const discordResult = await pool.query(
-      'SELECT * FROM discord WHERE id = $1',
+      'SELECT * FROM "Discord" WHERE id = $1',
       [discordId]
     );
     
@@ -221,45 +256,15 @@ export async function syncDiscordToSheets(discordId: string): Promise<string> {
     }
     
     const discordRecord = discordResult.rows[0];
-    const accessToken = await getGoogleAccessToken();
     
-    // Format the Discord data for Google Sheets
-    const rowData = formatDiscordToRow(discordRecord);
-    if (rowData.length === 0) {
-      return `Formatted Discord data is empty for ID: ${discordId}. Sync skipped.`;
+    // Get the associated project ID
+    const projectId = discordRecord.projectId;
+    if (!projectId) {
+      return `Discord ${discordId} has no associated project_id. Cannot sync to project row.`;
     }
     
-    // Try to find if the Discord already exists in the sheet
-    const rowIndex = await findRowIndexById(accessToken, discordId, DISCORD_SHEET_NAME);
-    
-    if (rowIndex !== null) {
-      // Row found, update it
-      const lastColumnLetter = String.fromCharCode('A'.charCodeAt(0) + rowData.length - 1);
-      const updateRange = `${DISCORD_SHEET_NAME}!A${rowIndex}:${lastColumnLetter}${rowIndex}`;
-      
-      console.log(`Updating row ${rowIndex} (Range: ${updateRange}) for Discord ID: ${discordId}`);
-      
-      const updateUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${updateRange}?valueInputOption=USER_ENTERED`;
-      await axios.put(
-        updateUrl,
-        { values: [rowData] },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      
-      return `Updated row ${rowIndex} in sheet for Discord ID: ${discordId}`;
-    } else {
-      // Row not found, create it
-      console.log(`Row for Discord ID ${discordId} not found. Creating new row.`);
-      
-      const appendUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${DISCORD_SHEET_NAME}!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-      await axios.post(
-        appendUrl,
-        { values: [rowData] },
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      
-      return `Created new row in sheet for Discord ID: ${discordId}`;
-    }
+    // Sync by calling the project sync function with this Discord data
+    return await syncProjectToSheets(projectId);
   } catch (error) {
     console.error(`Error syncing Discord ${discordId} to sheets:`, error);
     throw new Error(`Failed to sync Discord to Google Sheets: ${error instanceof Error ? error.message : String(error)}`);
@@ -271,68 +276,11 @@ export async function syncDiscordToSheets(discordId: string): Promise<string> {
  */
 export async function setupDatabaseTriggers(): Promise<void> {
   try {
-    console.log('Setting up database triggers for Google Sheets sync');
-    
-    // Create function for project sync
-    await pool.query(`
-      CREATE OR REPLACE FUNCTION sync_project_to_sheets()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        -- Add project_id to a queue table that your application will process
-        INSERT INTO sheets_sync_queue (record_id, record_type, operation)
-        VALUES (NEW.id, 'project', TG_OP);
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-    `);
-    
-    // Create function for discord sync
-    await pool.query(`
-      CREATE OR REPLACE FUNCTION sync_discord_to_sheets()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        -- Add discord_id to a queue table that your application will process
-        INSERT INTO sheets_sync_queue (record_id, record_type, operation)
-        VALUES (NEW.id, 'discord', TG_OP);
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-    `);
-    
-    // Create queue table if it doesn't exist
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sheets_sync_queue (
-        id SERIAL PRIMARY KEY,
-        record_id TEXT NOT NULL,
-        record_type TEXT NOT NULL,
-        operation TEXT NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        processed_at TIMESTAMP WITH TIME ZONE,
-        status TEXT
-      );
-    `);
-    
-    // Create trigger for project table
-    await pool.query(`
-      DROP TRIGGER IF EXISTS project_sheets_sync ON project;
-      CREATE TRIGGER project_sheets_sync
-      AFTER INSERT OR UPDATE ON project
-      FOR EACH ROW
-      EXECUTE FUNCTION sync_project_to_sheets();
-    `);
-    
-    // Create trigger for discord table
-    await pool.query(`
-      DROP TRIGGER IF EXISTS discord_sheets_sync ON discord;
-      CREATE TRIGGER discord_sheets_sync
-      AFTER INSERT OR UPDATE ON discord
-      FOR EACH ROW
-      EXECUTE FUNCTION sync_discord_to_sheets();
-    `);
-    
-    console.log('Database triggers for Google Sheets sync setup complete');
+    console.log('Setting up database triggers for Google Sheets sync - SKIPPED to avoid DB schema changes');
+    // This function is intentionally left empty to avoid modifying the database schema
+    // For actual setup of database triggers, use the dedicated file: src/services/sheets-db-setup.service.ts
   } catch (error) {
-    console.error('Error setting up database triggers:', error);
+    console.error('Error in setupDatabaseTriggers (skipped):', error);
     throw new Error(`Failed to setup database triggers: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -342,65 +290,10 @@ export async function setupDatabaseTriggers(): Promise<void> {
  */
 export async function processQueue(batchSize: number = 10): Promise<string> {
   try {
-    console.log(`Processing Google Sheets sync queue (batch size: ${batchSize})`);
-    
-    // Get unprocessed items from queue
-    const queueResult = await pool.query(
-      `SELECT * FROM sheets_sync_queue 
-       WHERE processed_at IS NULL 
-       ORDER BY created_at ASC 
-       LIMIT $1`,
-      [batchSize]
-    );
-    
-    if (queueResult.rows.length === 0) {
-      return 'No queue items to process';
-    }
-    
-    let processedCount = 0;
-    let errorCount = 0;
-    
-    // Process each queue item
-    for (const item of queueResult.rows) {
-      try {
-        console.log(`Processing queue item: ${item.record_type} ${item.record_id} (${item.operation})`);
-        
-        let result = '';
-        if (item.record_type === 'project') {
-          result = await syncProjectToSheets(item.record_id);
-        } else if (item.record_type === 'discord') {
-          result = await syncDiscordToSheets(item.record_id);
-        } else {
-          result = `Unknown record type: ${item.record_type}`;
-        }
-        
-        // Mark as processed
-        await pool.query(
-          `UPDATE sheets_sync_queue 
-           SET processed_at = NOW(), status = $1 
-           WHERE id = $2`,
-          ['completed', item.id]
-        );
-        
-        processedCount++;
-        console.log(`Queue item ${item.id} processed: ${result}`);
-      } catch (error) {
-        errorCount++;
-        console.error(`Error processing queue item ${item.id}:`, error);
-        
-        // Mark as failed
-        await pool.query(
-          `UPDATE sheets_sync_queue 
-           SET processed_at = NOW(), status = $1 
-           WHERE id = $2`,
-          [`failed: ${error instanceof Error ? error.message : String(error)}`, item.id]
-        );
-      }
-    }
-    
-    return `Processed ${processedCount} items (${errorCount} errors)`;
+    console.log(`Processing Google Sheets sync queue (batch size: ${batchSize}) - SKIPPED to avoid DB interactions`);
+    return 'Queue processing is disabled. Use the dedicated service in sheets-db-setup.service.ts if needed.';
   } catch (error) {
-    console.error('Error processing sync queue:', error);
+    console.error('Error in processQueue (skipped):', error);
     throw new Error(`Failed to process sync queue: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -413,12 +306,75 @@ export async function manualSync(type: 'project' | 'discord', id: string): Promi
     if (type === 'project') {
       return await syncProjectToSheets(id);
     } else if (type === 'discord') {
-      return await syncDiscordToSheets(id);
+      // For Discord, we'll find the associated project and sync that
+      const discordResult = await pool.query(
+        'SELECT "projectId" FROM "Discord" WHERE id = $1',
+        [id]
+      );
+      
+      if (discordResult.rows.length === 0 || !discordResult.rows[0].projectId) {
+        return `No project associated with Discord ID: ${id}. Cannot sync.`;
+      }
+      
+      const projectId = discordResult.rows[0].projectId;
+      return await syncProjectToSheets(projectId);
     } else {
       return 'Invalid type. Must be "project" or "discord".';
     }
   } catch (error) {
     console.error(`Error in manual sync (${type} ${id}):`, error);
     throw new Error(`Manual sync failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Initialize the Google Sheet with all existing projects and their Discord stats
+ * This is useful for the first run or to completely refresh the sheet
+ */
+export async function initializeSheetWithAllProjects(): Promise<string> {
+  try {
+    console.log('Initializing Google Sheet with all existing projects and their Discord stats');
+    
+    // Get all projects from the database - removed ORDER BY "createdAt"
+    const projectsResult = await pool.query('SELECT id FROM "Project"');
+    
+    if (projectsResult.rows.length === 0) {
+      return 'No projects found in the database to sync';
+    }
+    
+    console.log(`Found ${projectsResult.rows.length} projects to sync`);
+    
+    let successCount = 0;
+    let errorCount = 0;
+    let errorDetails: string[] = [];
+    
+    // Sync each project to the Google Sheet
+    for (const project of projectsResult.rows) {
+      try {
+        console.log(`Syncing project ${project.id}...`);
+        await syncProjectToSheets(project.id);
+        successCount++;
+      } catch (error) {
+        errorCount++;
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error(`Error syncing project ${project.id}:`, error);
+        errorDetails.push(`Project ${project.id}: ${errorMessage}`);
+      }
+    }
+    
+    // Include first 3 error details in the result message (if any)
+    let errorSummary = '';
+    if (errorDetails.length > 0) {
+      const detailsToShow = errorDetails.slice(0, 3);
+      errorSummary = `\nFirst ${detailsToShow.length} errors: \n` + detailsToShow.join('\n');
+      if (errorDetails.length > 3) {
+        errorSummary += `\n...and ${errorDetails.length - 3} more errors.`;
+      }
+    }
+    
+    return `Initialized sheet with ${successCount} projects (${errorCount} errors)${errorSummary}`;
+  } catch (error) {
+    console.error('Error initializing sheet with all projects:', error);
+    throw new Error(`Failed to initialize sheet: ${error instanceof Error ? error.message : String(error)}`);
   }
 } 

@@ -10,7 +10,12 @@
     "dev:legacy": "ts-node-dev --respawn --transpile-only src/index.ts",
     "test:email": "ts-node src/test-email.ts",
     "test": "jest --detectOpenHandles",
-    "test:watch": "jest --watch --detectOpenHandles"
+    "test:watch": "jest --watch --detectOpenHandles",
+    "initialize-sheets": "ts-node src/scripts/initialize-sheets.ts",
+    "setup-sheets-db": "ts-node src/scripts/setup-sheets-db-triggers.ts",
+    "process-sheets-queue": "ts-node src/scripts/process-sheets-sync-queue.ts",
+    "check-db": "ts-node src/scripts/check-db-schema.ts",
+    "check-google": "ts-node src/scripts/check-google-credentials.ts"
   },
   "keywords": [
     "biodao",

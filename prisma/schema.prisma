@@ -7,77 +7,66 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// New Model for individual users
 model BioUser {
-  id           String    @id @default(uuid())
-  privyId      String    @unique // The User's Privy ID
-  wallet       String?   @unique // User's primary wallet address
-  email        String?   @unique
-  fullName     String?
-  avatarUrl    String?
-  referralCode String?   @unique @default(uuid()) // Auto-generate a referral code
-  
-  // Discord connection fields
-  discordId    String?   @unique // Discord user ID
-  discordUsername String? // Discord username
-  discordAvatar  String? // Discord avatar URL
-  discordConnectedAt DateTime? // When the user connected their Discord
-  discordRefreshToken String? // For refreshing Discord auth
-  discordAccessToken String? // For Discord API access
-
-  // Twitter connection fields
-  twitterId    String?   @unique // Twitter user ID
-  twitterUsername String? // Twitter handle/username
-  twitterName  String?   // Twitter display name
-  twitterAvatar String?  // Twitter profile image URL
-  twitterConnectedAt DateTime? // When the user connected their Twitter
-  twitterAccessToken String? // For Twitter API access
-  twitterRefreshToken String? // For Twitter API refresh
-
-  // Relationships
-  memberships  ProjectMember[]   // Projects the user is a member of
-  invitesSent  ProjectInvite[] @relation("InvitesSent") // Invites sent by the user
-  chatMessages ChatMessage[]   // Messages sent by the user
-
-  // Self-relation for referrals
-  referredById String?
-  referredBy   BioUser?        @relation("Referrals", fields: [referredById], references: [id])
-  referrals    BioUser[]       @relation("Referrals") // Users referred by this user
-
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  String          @id @default(uuid())
+  privyId             String          @unique
+  wallet              String?         @unique
+  email               String?         @unique
+  fullName            String?
+  avatarUrl           String?
+  referralCode        String?         @unique @default(uuid())
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  referredById        String?
+  discordAccessToken  String?
+  discordAvatar       String?
+  discordConnectedAt  DateTime?
+  discordId           String?         @unique
+  discordRefreshToken String?
+  discordUsername     String?
+  twitterAccessToken  String?
+  twitterAvatar       String?
+  twitterConnectedAt  DateTime?
+  twitterId           String?         @unique
+  twitterName         String?
+  twitterRefreshToken String?
+  twitterUsername     String?
+  referredBy          BioUser?        @relation("Referrals", fields: [referredById], references: [id])
+  referrals           BioUser[]       @relation("Referrals")
+  chatMessages        ChatMessage[]
+  invitesSent         ProjectInvite[] @relation("InvitesSent")
+  memberships         ProjectMember[]
 }
 
-// New Model for the shared Project/DAO/Team
 model Project {
-  id                   String           @id @default(uuid())
-  privyId              String?          @unique
-  level                Int              @default(1)
-  projectName          String?
-  projectDescription   String?
-  projectVision        String?
-  scientificReferences String?
-  credentialLinks      String?
-  teamMembers          String?
-  teamDescription      String?
-  motivation           String?
-  progress             String?
-  referralCode         String?          @unique
-  referredById         String?
-  referralSource       String?
-  projectLinks         String?
-  verifiedScientistCount Int            @default(0) // Track verified scientists for Level 6
-  ChatSessions         ChatSession[]
-  Discord              Discord?
-  NFTs                 NFT[]
-  members              ProjectMember[]
-  invites              ProjectInvite[]
-  referredBy           Project?         @relation("Referrals", fields: [referredById], references: [id])
-  referrals            Project[]        @relation("Referrals")
-  Twitter              Twitter?         // Add relation to Twitter model
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  dkgFiles             DKGFile[]        // Added relation to DKGFile
+  id                     String          @id @default(uuid())
+  level                  Int             @default(1)
+  scientificReferences   String?
+  credentialLinks        String?
+  motivation             String?
+  progress               String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  teamDescription        String?
+  teamMembers            String?
+  projectLinks           String?
+  referralSource         String?
+  privyId                String?         @unique
+  projectDescription     String?
+  projectName            String?
+  projectVision          String?
+  referralCode           String?         @unique
+  referredById           String?
+  verifiedScientistCount Int             @default(0)
+  ChatSessions           ChatSession[]
+  dkgFiles               DKGFile[]
+  Discord                Discord?
+  NFTs                   NFT[]
+  referredBy             Project?        @relation("Referrals", fields: [referredById], references: [id])
+  referrals              Project[]       @relation("Referrals")
+  invites                ProjectInvite[]
+  members                ProjectMember[]
+  Twitter                Twitter?
 
   @@index([privyId])
   @@index([referralCode])
@@ -86,175 +75,145 @@ model Project {
 model NFT {
   id              String   @id @default(uuid())
   type            String
+  mintedAt        DateTime @default(now())
   projectId       String
   transactionHash String?
   imageUrl        String?
-  tokenId         String?  // Added for IP-NFTs
-  metadataUri     String?  // Added for IP-NFTs
+  metadataUri     String?
+  tokenId         String?
   project         Project  @relation(fields: [projectId], references: [id])
-  mintedAt        DateTime @default(now())
 }
 
-// New Model for tracking Discord members
 model DiscordMember {
-  id                  String   @id @default(uuid())
-  discordId           String   @unique // Discord user ID
-  discordUsername     String   // Discord username
-  discordAvatar       String?  // Discord avatar URL
-  linkedinUrl         String?  // LinkedIn profile URL
-  scientificProfileUrl String? // URL to scientific profile (e.g., Google Scholar, ORCID, ResearchGate)
-  motivationToJoin    String?  @db.Text // Why they joined the Discord/BioDAO
-  isOnboarded         Boolean  @default(false) // Whether they've completed onboarding
-  paperContributions  Int      @default(0) // Count of research papers shared
-  messageCount        Int      @default(0) // Count of messages sent
-  
-  // Link to the Discord server they're a member of
-  discordServerId     String
-  discord             Discord  @relation(fields: [discordServerId], references: [serverId], onDelete: Cascade)
-  
-  // New relation to scientific profiles
-  scientificProfiles  ScientificProfile[]
-  
-  joinedAt            DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   String              @id @default(uuid())
+  discordId            String              @unique
+  discordUsername      String
+  discordAvatar        String?
+  linkedinUrl          String?
+  scientificProfileUrl String?
+  motivationToJoin     String?
+  isOnboarded          Boolean             @default(false)
+  paperContributions   Int                 @default(0)
+  messageCount         Int                 @default(0)
+  discordServerId      String
+  joinedAt             DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  discord              Discord             @relation(fields: [discordServerId], references: [serverId], onDelete: Cascade)
+  scientificProfiles   ScientificProfile[]
 }
 
-// New Model for tracking multiple scientific profiles per Discord member
 model ScientificProfile {
-  id              String        @id @default(uuid())
-  url             String        // The full URL to the scientific profile
-  platform        String        // e.g., "Google Scholar", "ORCID", "ResearchGate", "Exaly"
-  profileId       String?       // The ID/username from the platform (if extractable)
-  hIndex          Int?          // H-index if available
-  citations       Int?          // Citation count if available
-  
-  // Relation to the Discord member
-  memberId        String
-  member          DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  
-  // Metadata
-  lastScraped     DateTime?     // When profile metrics were last updated
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-}
-
-// Updated Discord Model
-model Discord {
-  id                String    @id @default(uuid())
-  serverId          String    @unique // Keep Discord Server ID unique
-  inviteLink        String?
-  memberCount       Int?
-  papersShared      Int       @default(0)
-  messagesCount     Int       @default(0)
-  qualityScore      Int       @default(0)
-  botAdded          Boolean   @default(false)
-  botAddedAt        DateTime?
-  verificationToken String?
-  verified          Boolean   @default(false)
-  serverIcon        String?
-  serverName        String?
-  projectId         String    @unique
-  project           Project   @relation(fields: [projectId], references: [id])
-  members           DiscordMember[] // New relation to track Discord members
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-}
-
-// Updated ChatSession Model with sessionType
-model ChatSession {
   id          String        @id @default(uuid())
-  projectId   String
-  sessionType String?       @default("coreagent") // "coreagent" or "coachingagent"
-  messages    ChatMessage[]
-  project     Project       @relation(fields: [projectId], references: [id])
+  url         String
+  platform    String
+  profileId   String?
+  hIndex      Int?
+  citations   Int?
+  memberId    String
+  lastScraped DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  member      DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+}
+
+model Discord {
+  id                String          @id @default(uuid())
+  serverId          String          @unique
+  memberCount       Int?
+  papersShared      Int             @default(0)
+  messagesCount     Int             @default(0)
+  qualityScore      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  inviteLink        String?
+  botAdded          Boolean         @default(false)
+  botAddedAt        DateTime?
+  verificationToken String?
+  verified          Boolean         @default(false)
+  serverIcon        String?
+  serverName        String?
+  projectId         String          @unique
+  project           Project         @relation(fields: [projectId], references: [id])
+  members           DiscordMember[]
+}
+
+model ChatSession {
+  id          String        @id @default(uuid())
+  updatedAt   DateTime      @updatedAt
+  projectId   String
+  createdAt   DateTime      @default(now())
+  sessionType String?       @default("coreagent")
+  messages    ChatMessage[]
+  project     Project       @relation(fields: [projectId], references: [id])
 }
 
 model ChatMessage {
-  id            String   @id @default(uuid())
-  sessionId     String
-  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  timestamp     DateTime @default(now())
-  content       String   @db.Text // Use Text for potentially long messages
+  id            String      @id @default(uuid())
+  content       String
   isFromAgent   Boolean
-  actionTaken   String?  // e.g., MINT_NFT, DISCORD_SETUP
-  actionSuccess Boolean? // true/false if action was attempted
-
-  // Optional relationship to BioUser for authorship
-  bioUserId String?
-  bioUser   BioUser? @relation(fields: [bioUserId], references: [id], onDelete: SetNull) // SetNull if user is deleted
+  timestamp     DateTime    @default(now())
+  sessionId     String
+  actionTaken   String?
+  actionSuccess Boolean?
+  bioUserId     String?
+  bioUser       BioUser?    @relation(fields: [bioUserId], references: [id])
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
-// Linking table for User <-> Project relationship with roles
 model ProjectMember {
   id        String   @id @default(uuid())
-  role      String   // e.g., "founder", "member", "admin"
+  role      String
   joinedAt  DateTime @default(now())
-
   bioUserId String
-  bioUser   BioUser  @relation(fields: [bioUserId], references: [id], onDelete: Cascade) // Link to BioUser
-
   projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade) // Link to Project
+  bioUser   BioUser  @relation(fields: [bioUserId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([bioUserId, projectId]) // User can only be a member of a project once
+  @@unique([bioUserId, projectId])
 }
 
-// Model for tracking co-founder/member invites
 model ProjectInvite {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   projectId     String
-  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   inviterUserId String
-  inviter       BioUser   @relation("InvitesSent", fields: [inviterUserId], references: [id])
-  inviteeEmail  String    // Email the invite was sent to
-  token         String    @unique // Secure, single-use token
-  status        String    @default("pending") // "pending", "accepted", "expired", "revoked"
-  expiresAt     DateTime  // Set an expiry time for the token
-  createdAt     DateTime  @default(now())
+  inviteeEmail  String
+  token         String   @unique
+  status        String   @default("pending")
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  inviter       BioUser  @relation("InvitesSent", fields: [inviterUserId], references: [id])
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
-// Add a Twitter model to track user's Twitter account connection
 model Twitter {
-  id                String   @id @default(uuid())
-  projectId         String   @unique // One-to-one relation with Project
-  connected         Boolean  @default(false)
-  twitterUsername   String?  
+  id                String    @id @default(uuid())
+  projectId         String    @unique
+  connected         Boolean   @default(false)
+  twitterUsername   String?
   twitterId         String?
-  introTweetsCount  Int      @default(0)
-  tweetIds          String?  // Comma-separated list of tweet IDs
-  twitterSpaceUrl   String?  // URL to Twitter Space for Level 6
-  twitterSpaceDate  DateTime? // Date when Twitter Space was hosted
-  blogpostUrl       String?  // URL to visionary blogpost for Level 7
-  blogpostDate      DateTime? // Date when blogpost was published
-  twitterThreadUrl  String?  // URL to Twitter thread for Level 7
-  twitterThreadDate DateTime? // Date when Twitter thread was shared
-  loomVideoUrl      String?  // URL to welcome Loom video for Level 7
-  loomVideoDate     DateTime? // Date when Loom video was recorded
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Relation to Project
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  introTweetsCount  Int       @default(0)
+  tweetIds          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  twitterSpaceDate  DateTime?
+  twitterSpaceUrl   String?
+  blogpostDate      DateTime?
+  blogpostUrl       String?
+  twitterThreadDate DateTime?
+  twitterThreadUrl  String?
+  loomVideoDate     DateTime?
+  loomVideoUrl      String?
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
-
-// Add the new DKGFile model, for example, after the Project model or at the end of the file.
-// If you have a specific place you prefer, adjust accordingly.
-// For this example, I'm adding it after the Project model if other models follow, 
-// or it can be placed before the enum definitions if those are at the very end.
-// Assuming it's placed logically with other models:
 
 model DKGFile {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  hash      String  // The DKG hash (UAL)
-  filename  String? // Original filename of the uploaded PDF
-
+  hash      String
+  filename  String?
   projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
 }
