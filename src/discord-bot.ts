@@ -28,6 +28,7 @@ import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
+import { syncProjectToSheets } from './services/sheets-sync.service';
 
 
 // Fix for missing types for pdf-parse
@@ -359,6 +360,25 @@ function verifyBotPermissions() {
   });
 }
 
+// Helper function to sync Discord stats to Google Sheets - add near the top after function declarations
+async function syncDiscordStatsToSheets(guildId: string): Promise<void> {
+  try {
+    // Find the Discord record to get the projectId
+    const discordRecord = await prisma.discord.findFirst({ 
+      where: { serverId: guildId } 
+    });
+    
+    if (discordRecord?.projectId) {
+      console.log(`[SHEETS_SYNC] Syncing project ${discordRecord.projectId} to Google Sheets after Discord stat update`);
+      await syncProjectToSheets(discordRecord.projectId).catch(error => {
+        console.error(`[SHEETS_SYNC] Error syncing project ${discordRecord.projectId} to Google Sheets:`, error);
+      });
+    }
+  } catch (error) {
+    console.error(`[SHEETS_SYNC] Error in syncDiscordStatsToSheets for guild ${guildId}:`, error);
+  }
+}
+
 /**
  * Initialize stats tracking for a guild
  */
@@ -396,6 +416,9 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
       
       console.log(`[MEMBER_SYNC] Updated member count in database for ${guild.name} to ${currentMemberCount}`);
       console.log(`[DEBUG] Update result: ${updateResult ? 'SUCCESS' : 'FAILURE'}, new count: ${updateResult?.memberCount}`);
+      
+      // Add sync to Google Sheets
+      await syncDiscordStatsToSheets(guild.id);
     } catch (dbError) {
       console.error(`[MEMBER_SYNC] Error updating member count in database:`, dbError);
     }
@@ -621,6 +644,9 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
               console.error(`[DEBUG] Error updating channel topic:`, topicError);
               // Non-critical error, can continue
             }
+
+            // Add sync to Google Sheets after updating historical stats
+            await syncDiscordStatsToSheets(guild.id);
           } catch (updateError) {
             console.error(`[DEBUG] Failed to update DB with new counts:`, updateError);
           }
@@ -808,6 +834,9 @@ client.on(Events.GuildMemberAdd, async (member: GuildMember) => {
         `[MEMBER_JOIN] Member milestone reached (${memberCount}) - checking level requirements`
       );
       await checkGuildLevelRequirements(guild.id);
+      
+      // Add sync to Google Sheets
+      await syncDiscordStatsToSheets(guild.id);
     }
   } catch (error) {
     console.error(`[MEMBER_JOIN] Error in GuildMemberAdd event handler:`, error);
@@ -905,6 +934,10 @@ client.on(Events.MessageCreate, async (message: Message) => {
           } // Comment moved outside: ONLY include the specific fields we want to update
         });
         console.log(`[PAPER_TRACK] Updated paper count in DB for guild ${guildId}`);
+        
+      
+          await syncDiscordStatsToSheets(guildId);
+       
       }
     } catch (dbError) {
       console.error(`[PAPER_TRACK] Error updating paper count in DB:`, dbError);
@@ -941,6 +974,10 @@ client.on(Events.MessageCreate, async (message: Message) => {
           } // Comment moved outside: ONLY include the specific fields we want to update
         });
         console.log(`[MESSAGE_TRACK] Updated message count in DB for guild ${guildId}`);
+        
+    
+          await syncDiscordStatsToSheets(guildId);
+       
       }
     } catch (dbError) {
       console.error(`[MESSAGE_TRACK] Error updating message count in DB:`, dbError);
@@ -971,6 +1008,9 @@ client.on(Events.MessageCreate, async (message: Message) => {
     try {
       await notifyPortalAPI(guildId, 'stats_update');
       console.log(`[API_NOTIFY] Portal API notified for guild ${guildId} stats update`);
+      
+      // Add sync to Google Sheets
+      await syncDiscordStatsToSheets(guildId);
     } catch (apiError) {
       console.error(`[API_NOTIFY] Error notifying Portal API:`, apiError);
     }
@@ -1700,11 +1740,16 @@ async function notifyPortalAPI(
   }
 }
 
+// Modify the evaluateMessageQuality function to sync after updates
 function evaluateMessageQuality(guildId: string): void {
   const stats = guildStats.get(guildId);
   const messageHistory = guildMessageHistory.get(guildId);
   if (!stats || !messageHistory) return;
   console.log(`Evaluating message quality for guild ${guildId}`);
+  
+  // Add variable to track if we need to update the quality score
+  let qualityScoreNeedsUpdate = false;
+  
   // Get the last 24 hours of messages
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const recentMessages = messageHistory.filter((msg) => msg.timestamp > oneDayAgo);
@@ -1724,6 +1769,7 @@ function evaluateMessageQuality(guildId: string): void {
     console.log(
       `Applied quality penalty to guild ${guildId}, new score: ${stats.qualityScore.toFixed(1)}`
     );
+    qualityScoreNeedsUpdate = true;
   }
   // If more than 80% of messages are quality, apply a bonus
   if (recentMessages.length > 10 && qualityPercentage > 80) {
@@ -1731,8 +1777,35 @@ function evaluateMessageQuality(guildId: string): void {
     console.log(
       `Applied quality bonus to guild ${guildId}, new score: ${stats.qualityScore.toFixed(1)}`
     );
+    qualityScoreNeedsUpdate = true;
   }
-  // Update API with latest stats
+
+  // Update API with latest stats and sync to Google Sheets if quality changed
+  if (qualityScoreNeedsUpdate) {
+    (async () => {
+      try {
+        // Update the database with the new quality score
+        const discordRecord = await prisma.discord.findFirst({ 
+          where: { serverId: guildId } 
+        });
+        
+        if (discordRecord) {
+          await prisma.discord.update({
+            where: { id: discordRecord.id },
+            data: { qualityScore: Math.round(stats.qualityScore) }
+          });
+          console.log(`[QUALITY_UPDATE] Updated quality score in DB for guild ${guildId}`);
+          
+          // Sync to Google Sheets
+          await syncDiscordStatsToSheets(guildId);
+        }
+      } catch (error) {
+        console.error(`[QUALITY_UPDATE] Error updating quality score in DB:`, error);
+      }
+    })().catch(console.error);
+  }
+  
+  // Original notification still happens whether or not we updated the score
   notifyPortalAPI(guildId, 'stats_update').catch(console.error);
 }
 
