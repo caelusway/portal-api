@@ -1611,7 +1611,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) {
   // Add comprehensive logging
   console.log(`[Summarize] Handling interaction for user ${interaction.user.id} in guild ${interaction.guildId}`);
-
+  
   try {
     const file = interaction.options.getAttachment('file');
 
@@ -1644,12 +1644,13 @@ async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) 
     await interaction.deferReply(); // Use deferReply here
     console.log('[Summarize] Reply deferred. Processing PDF...');
 
-    // Dynamically import node-fetch
-    const { default: fetch } = await import('node-fetch');
+    // Import node-fetch properly using dynamic import
+    // Use a simpler implementation that avoids type issues
+    const nodeFetch = await import('node-fetch').then(module => module.default);
 
     // Download the PDF
     console.log(`[Summarize] Fetching PDF from: ${file?.url}`);
-    const response = await fetch(file?.url || '');
+    const response = await nodeFetch(file?.url || '');
     if (!response.ok) {
         throw new Error(`Failed to fetch PDF: ${response.statusText}`);
     }
@@ -1709,7 +1710,6 @@ async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) 
   }
 }
 
-
 async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
   console.log(`[Upload] Handling interaction ID: ${interaction.id} for user ${interaction.user.id}`);
 
@@ -1748,9 +1748,9 @@ async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
     console.log(`[Upload] editReply (processing status) SUCCESSFUL for interaction ID: ${interaction.id}`);
 
     // Download & Parse
-    // Dynamically import node-fetch here as well
-    const { default: fetch } = await import('node-fetch');
-    const response = await fetch(validFile.url);
+    // Import node-fetch properly
+    const nodeFetch = await import('node-fetch').then(module => module.default);
+    const response = await nodeFetch(validFile.url);
     if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);
     const buffer = await response.arrayBuffer();
     const data = await pdfParse(Buffer.from(buffer));
