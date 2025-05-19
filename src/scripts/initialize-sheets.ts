@@ -42,15 +42,33 @@ async function main() {
   try {
     if (projectId) {
       console.log(`🔎 Syncing single project: ${projectId}`);
-      const result = await syncProjectToSheets(projectId);
-      console.log(`✅ Result: ${result}`);
+      
+      try {
+        const result = await syncProjectToSheets(projectId);
+        console.log(`✅ Result: ${result}`);
+      } catch (projectError) {
+        console.error(`❌ Error syncing project ${projectId}:`, projectError);
+        process.exit(1);
+      }
     } else {
       console.log('🔄 Syncing all projects to Google Sheets...');
-      const result = await initializeSheetWithAllProjects();
-      console.log(`✅ Result: ${result}`);
+      console.log('This may take a while depending on the number of projects.');
+      
+      try {
+        const result = await initializeSheetWithAllProjects();
+        console.log(`✅ Success! ${result}`);
+      } catch (batchError) {
+        console.error('❌ Error during batch sync:', batchError);
+        process.exit(1);
+      }
     }
+    
+    console.log('✨ Google Sheets sync completed successfully!');
+    console.log('------------------------------------');
+    console.log('👉 Check your Google Sheet to verify the data is synchronized correctly.');
+    
   } catch (error) {
-    console.error('❌ Error during sheet initialization:', error);
+    console.error('❌ Unexpected error during Google Sheets initialization:', error);
     process.exit(1);
   }
 }

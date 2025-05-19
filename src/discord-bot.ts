@@ -28,7 +28,14 @@ import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
-import { syncProjectToSheets } from './services/sheets-sync.service';
+import {
+  syncProjectToSheets,
+  updateMessageCount,
+  updatePapersShared,
+  updateQualityScore,
+  updateMemberCount,
+  syncDiscordStatsToSheets
+} from './services/sheets-sync.service';
 
 
 // Fix for missing types for pdf-parse
@@ -360,24 +367,28 @@ function verifyBotPermissions() {
   });
 }
 
-// Helper function to sync Discord stats to Google Sheets - add near the top after function declarations
-async function syncDiscordStatsToSheets(guildId: string): Promise<void> {
-  try {
-    // Find the Discord record to get the projectId
-    const discordRecord = await prisma.discord.findFirst({ 
-      where: { serverId: guildId } 
-    });
-    
-    if (discordRecord?.projectId) {
-      console.log(`[SHEETS_SYNC] Syncing project ${discordRecord.projectId} to Google Sheets after Discord stat update`);
-      await syncProjectToSheets(discordRecord.projectId).catch(error => {
-        console.error(`[SHEETS_SYNC] Error syncing project ${discordRecord.projectId} to Google Sheets:`, error);
-      });
-    }
-  } catch (error) {
-    console.error(`[SHEETS_SYNC] Error in syncDiscordStatsToSheets for guild ${guildId}:`, error);
+// Helper function to validate and map Discord metrics to Google Sheets columns
+function validateMetricColumnMapping(metricName: string): boolean | string {
+  // Define the expected mapping between Discord metrics and Google Sheets columns
+  const expectedColumnMap: Record<string, string> = {
+    'messagesCount': 'messagesCount', // Column Q - index 16 
+    'papersShared': 'papersShared',   // Column R - index 17
+    'qualityScore': 'qualityScore',   // Column S - index 18
+    'memberCount': 'memberCount'      // Column T - index 19
+  };
+  
+  // Check if the metric name is in our expected mapping
+  if (!expectedColumnMap[metricName]) {
+    return `Unknown metric: ${metricName}. Valid metrics are: ${Object.keys(expectedColumnMap).join(', ')}`;
   }
+  
+  // Metric name is valid
+  return true;
 }
+
+// --- Global Error Handlers ---
+
+// ... existing code ...
 
 /**
  * Initialize stats tracking for a guild
@@ -417,8 +428,8 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
       console.log(`[MEMBER_SYNC] Updated member count in database for ${guild.name} to ${currentMemberCount}`);
       console.log(`[DEBUG] Update result: ${updateResult ? 'SUCCESS' : 'FAILURE'}, new count: ${updateResult?.memberCount}`);
       
-      // Add sync to Google Sheets
-      await syncDiscordStatsToSheets(guild.id);
+      // Update specific member count in Google Sheet instead of full sync
+      await syncDiscordStatsToSheets(guild.id, 'memberCount', currentMemberCount);
     } catch (dbError) {
       console.error(`[MEMBER_SYNC] Error updating member count in database:`, dbError);
     }
@@ -646,7 +657,8 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
             }
 
             // Add sync to Google Sheets after updating historical stats
-            await syncDiscordStatsToSheets(guild.id);
+            await syncDiscordStatsToSheets(guild.id, 'messagesCount', stats.messageCount);
+            await syncDiscordStatsToSheets(guild.id, 'papersShared', stats.papersShared);
           } catch (updateError) {
             console.error(`[DEBUG] Failed to update DB with new counts:`, updateError);
           }
@@ -935,9 +947,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
         });
         console.log(`[PAPER_TRACK] Updated paper count in DB for guild ${guildId}`);
         
-      
-          await syncDiscordStatsToSheets(guildId);
-       
+        // Add direct sync to Google Sheets for just the papers count
+        await syncDiscordStatsToSheets(guildId, 'papersShared', updatedStats.papersShared);
       }
     } catch (dbError) {
       console.error(`[PAPER_TRACK] Error updating paper count in DB:`, dbError);
@@ -975,9 +986,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
         });
         console.log(`[MESSAGE_TRACK] Updated message count in DB for guild ${guildId}`);
         
-    
-          await syncDiscordStatsToSheets(guildId);
-       
+        // Add direct sync to Google Sheets for just the message count
+        await syncDiscordStatsToSheets(guildId, 'messagesCount', updatedStats.messageCount);
       }
     } catch (dbError) {
       console.error(`[MESSAGE_TRACK] Error updating message count in DB:`, dbError);
@@ -1796,8 +1806,8 @@ function evaluateMessageQuality(guildId: string): void {
           });
           console.log(`[QUALITY_UPDATE] Updated quality score in DB for guild ${guildId}`);
           
-          // Sync to Google Sheets
-          await syncDiscordStatsToSheets(guildId);
+          // Sync only the quality score to Google Sheets
+          await syncDiscordStatsToSheets(guildId, 'qualityScore', Math.round(stats.qualityScore));
         }
       } catch (error) {
         console.error(`[QUALITY_UPDATE] Error updating quality score in DB:`, error);
