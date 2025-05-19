@@ -360,30 +360,40 @@ function verifyBotPermissions() {
  * Initialize stats tracking for a guild
  */
 async function initializeGuildStats(guild: Guild): Promise<void> {
-  console.log(`Initializing stats for guild: ${guild.name} (${guild.id})`);
+  console.log(`[DEBUG] initializeGuildStats START for guild: ${guild.name} (${guild.id})`);
   // Fetch from DB
   const discordRecord = await prisma.discord.findFirst({ where: { serverId: guild.id } });
+  console.log(`[DEBUG] discordRecord lookup result: ${discordRecord ? 'FOUND' : 'NOT FOUND'}, ID: ${discordRecord?.id || 'N/A'}`);
+  
   const dbMessages = discordRecord?.messagesCount || 0;
   const dbPapers = discordRecord?.papersShared || 0;
   const dbQuality = discordRecord?.qualityScore || 50;
   const dbMemberCount = discordRecord?.memberCount || 0;
   
+  console.log(`[DEBUG] DB values: messages=${dbMessages}, papers=${dbPapers}, quality=${dbQuality}, members=${dbMemberCount}`);
+  
   // Check if member count needs to be updated
   const currentMemberCount = guild.memberCount;
+  console.log(`[DEBUG] Current member count from Discord API: ${currentMemberCount}`);
+  
   if (discordRecord && currentMemberCount !== dbMemberCount) {
     console.log(`[MEMBER_SYNC] Member count mismatch for ${guild.name}: DB=${dbMemberCount}, Actual=${currentMemberCount}. Updating...`);
     
     try {
       // Update member count in database
-      await prisma.discord.update({
+      console.log(`[DEBUG] Attempting to update memberCount in database. Record ID: ${discordRecord.id}`);
+      const updateResult = await prisma.discord.update({
         where: { id: discordRecord.id },
         data: { memberCount: currentMemberCount }
       });
       
       console.log(`[MEMBER_SYNC] Updated member count in database for ${guild.name} to ${currentMemberCount}`);
+      console.log(`[DEBUG] Update result: ${updateResult ? 'SUCCESS' : 'FAILURE'}, new count: ${updateResult?.memberCount}`);
     } catch (dbError) {
       console.error(`[MEMBER_SYNC] Error updating member count in database:`, dbError);
     }
+  } else {
+    console.log(`[DEBUG] Member count update skipped: ${discordRecord ? 'Record exists' : 'No record'}, counts match: ${currentMemberCount === dbMemberCount}`);
   }
 
   // Initialize guild stats in memory
@@ -394,18 +404,23 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
     lastMessageTimestamp: new Date(),
     activeUsers: new Set<string>(),
   });
+  console.log(`[DEBUG] In-memory guild stats initialized for ${guild.id}`);
 
   guildMessageHistory.set(guild.id, []);
   
   // Sync recent messages (last 24 hours)
-  const SYNC_RECENT_MESSAGES = 'true';
-  if (SYNC_RECENT_MESSAGES && discordRecord) {
+  const SYNC_RECENT_MESSAGES = process.env.SYNC_RECENT_MESSAGES || 'true';
+  console.log(`[DEBUG] SYNC_RECENT_MESSAGES value: ${SYNC_RECENT_MESSAGES}, type: ${typeof SYNC_RECENT_MESSAGES}`);
+  console.log(`[DEBUG] Will sync messages: ${SYNC_RECENT_MESSAGES === 'true' && discordRecord ? 'YES' : 'NO'}`);
+  
+  if (SYNC_RECENT_MESSAGES === 'true' && discordRecord) {
     try {
       console.log(`[MESSAGE_SYNC] Starting message sync for the last 12 hours in ${guild.name}...`);
       
       // Calculate timestamp for 24 hours ago
       const oneDayAgo = new Date();
       oneDayAgo.setHours(oneDayAgo.getHours() - 12);
+      console.log(`[DEBUG] Messages since: ${oneDayAgo.toISOString()}`);
       
       // Get all accessible text channels
       const textChannels = guild.channels.cache.filter(
@@ -414,6 +429,9 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
       );
       
       console.log(`[MESSAGE_SYNC] Found ${textChannels.size} accessible text channels in ${guild.name}`);
+      if (textChannels.size === 0) {
+        console.log(`[DEBUG] No accessible text channels found - check bot permissions in this guild`);
+      }
       
       let totalProcessedMessages = 0;
       let totalPapersFound = 0;
@@ -422,12 +440,13 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
       // Process each channel
       for (const [channelId, channel] of textChannels) {
         try {
-          console.log(`[MESSAGE_SYNC] Fetching messages from channel #${(channel as TextChannel).name}...`);
+          console.log(`[MESSAGE_SYNC] Fetching messages from channel #${(channel as TextChannel).name} (${channelId})...`);
           
           // Fetch recent messages
           const messages = await (channel as TextChannel).messages.fetch({ 
             limit: MESSAGE_FETCH_LIMIT 
           });
+          console.log(`[DEBUG] Fetched ${messages.size} messages from channel #${(channel as TextChannel).name}`);
           
           // Filter to messages within the last 24 hours and not from bots
           const recentMessages = messages.filter(msg => 
@@ -435,7 +454,7 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
             !msg.author.bot
           );
           
-          console.log(`[MESSAGE_SYNC] Processing ${recentMessages.size} messages from last 24h in #${(channel as TextChannel).name}`);
+          console.log(`[MESSAGE_SYNC] Processing ${recentMessages.size} messages from last 12h in #${(channel as TextChannel).name}`);
           
           // Process each message similar to the message event handler
           for (const [msgId, message] of recentMessages) {
@@ -522,15 +541,27 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
           papersSharedByGuild[guild.id] = stats.papersShared;
           
           // Update database
-          await prisma.discord.update({
-            where: { id: discordRecord.id },
-            data: {
-              messagesCount: stats.messageCount,
-              papersShared: stats.papersShared
-            }
-          });
+          console.log(`[DEBUG] Updating DB with processed messages (${totalProcessedMessages}) and papers (${totalPapersFound})`);
+          try {
+            const updateResult = await prisma.discord.update({
+              where: { id: discordRecord.id },
+              data: {
+                messagesCount: stats.messageCount,
+                papersShared: stats.papersShared
+              }
+            });
+            console.log(`[DEBUG] DB update result: ${JSON.stringify({
+              id: updateResult.id,
+              messagesCount: updateResult.messagesCount,
+              papersShared: updateResult.papersShared
+            })}`);
+          } catch (updateError) {
+            console.error(`[DEBUG] Failed to update DB with new counts:`, updateError);
+          }
           
           console.log(`[MESSAGE_SYNC] Successfully synced ${totalProcessedMessages} messages and ${totalPapersFound} papers for ${guild.name}`);
+        } else {
+          console.log(`[DEBUG] Stats for guild ${guild.id} unexpectedly missing after processing messages`);
         }
       } else {
         console.log(`[MESSAGE_SYNC] No new messages found to sync for ${guild.name}`);
@@ -541,15 +572,25 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
   }
   
   // Notify API and schedule quality evaluation
-  notifyPortalAPI(guild.id, 'stats_update');
+  console.log(`[DEBUG] Calling notifyPortalAPI for guild ${guild.id}`);
+  try {
+    await notifyPortalAPI(guild.id, 'stats_update');
+    console.log(`[DEBUG] notifyPortalAPI completed successfully`);
+  } catch (apiError) {
+    console.error(`[DEBUG] notifyPortalAPI failed:`, apiError);
+  }
+  
   setInterval(() => {
     evaluateMessageQuality(guild.id);
   }, MESSAGE_CONFIG.QUALITY_CHECK_INTERVAL_MS);
+  console.log(`[DEBUG] Quality evaluation timer set for guild ${guild.id}`);
   
   // Set in-memory for compatibility, but never use as source of truth
   messageCountByGuild[guild.id] = guildStats.get(guild.id)?.messageCount || dbMessages;
   papersSharedByGuild[guild.id] = guildStats.get(guild.id)?.papersShared || dbPapers;
   qualityScoreByGuild[guild.id] = dbQuality;
+  
+  console.log(`[DEBUG] initializeGuildStats COMPLETE for guild: ${guild.name} (${guild.id})`);
 }
 
 // Track papers shared by looking for links/attachments
