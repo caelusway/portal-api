@@ -183,6 +183,44 @@ const client = new Client({
   ],
 });
 
+/**
+ * Determine if a message is too simple to count as a meaningful contribution
+ */
+function isLowValueMessage(content: string): boolean {
+  // Normalize the content
+  const normalizedContent = content.toLowerCase().trim();
+  
+  // Skip messages that are too short
+  if (normalizedContent.length < 5) {
+    return true;
+  }
+  
+  // Common greetings and basic responses
+  const lowValuePatterns = [
+    /^(hi|hey|hello|sup|yo|gm|good morning|good evening|good night|gn|bye)$/i,
+    /^(what'?s up|how are you|how's it going)$/i,
+    /^(nice|cool|great|awesome|amazing|good|bad|sad|happy)$/i,
+    /^((?:ha){1,5})$/i, // matches: ha, haha, hahaha, etc.
+    /^[👋👍👎❤️😂🙏]+$/u, // just emojis
+  ];
+  
+  // Check against common low-value patterns
+  for (const pattern of lowValuePatterns) {
+    if (pattern.test(normalizedContent)) {
+      return true;
+    }
+  }
+  
+  // Count words - messages with only 1-2 words are usually low value
+  const wordCount = normalizedContent.split(/\s+/).filter((word) => word.length > 0).length;
+  if (wordCount <= 2) {
+    return true;
+  }
+  
+  // Not a low-value message
+  return false;
+}
+
 // --- Global Error Handlers ---
 process.on('uncaughtException', (error) => {
   console.error('UNCAUGHT EXCEPTION:', error);
@@ -328,7 +366,27 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
   const dbMessages = discordRecord?.messagesCount || 0;
   const dbPapers = discordRecord?.papersShared || 0;
   const dbQuality = discordRecord?.qualityScore || 50;
+  const dbMemberCount = discordRecord?.memberCount || 0;
+  
+  // Check if member count needs to be updated
+  const currentMemberCount = guild.memberCount;
+  if (discordRecord && currentMemberCount !== dbMemberCount) {
+    console.log(`[MEMBER_SYNC] Member count mismatch for ${guild.name}: DB=${dbMemberCount}, Actual=${currentMemberCount}. Updating...`);
+    
+    try {
+      // Update member count in database
+      await prisma.discord.update({
+        where: { id: discordRecord.id },
+        data: { memberCount: currentMemberCount }
+      });
+      
+      console.log(`[MEMBER_SYNC] Updated member count in database for ${guild.name} to ${currentMemberCount}`);
+    } catch (dbError) {
+      console.error(`[MEMBER_SYNC] Error updating member count in database:`, dbError);
+    }
+  }
 
+  // Initialize guild stats in memory
   guildStats.set(guild.id, {
     messageCount: dbMessages,
     papersShared: dbPapers,
@@ -338,13 +396,159 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
   });
 
   guildMessageHistory.set(guild.id, []);
+  
+  // Sync recent messages (last 24 hours)
+  const SYNC_RECENT_MESSAGES = 'true';
+  if (SYNC_RECENT_MESSAGES && discordRecord) {
+    try {
+      console.log(`[MESSAGE_SYNC] Starting message sync for the last 12 hours in ${guild.name}...`);
+      
+      // Calculate timestamp for 24 hours ago
+      const oneDayAgo = new Date();
+      oneDayAgo.setHours(oneDayAgo.getHours() - 12);
+      
+      // Get all accessible text channels
+      const textChannels = guild.channels.cache.filter(
+        channel => channel.type === ChannelType.GuildText && 
+                  (channel as TextChannel).viewable
+      );
+      
+      console.log(`[MESSAGE_SYNC] Found ${textChannels.size} accessible text channels in ${guild.name}`);
+      
+      let totalProcessedMessages = 0;
+      let totalPapersFound = 0;
+      const MESSAGE_FETCH_LIMIT = 50; // Reasonable limit per channel to avoid rate limits
+      
+      // Process each channel
+      for (const [channelId, channel] of textChannels) {
+        try {
+          console.log(`[MESSAGE_SYNC] Fetching messages from channel #${(channel as TextChannel).name}...`);
+          
+          // Fetch recent messages
+          const messages = await (channel as TextChannel).messages.fetch({ 
+            limit: MESSAGE_FETCH_LIMIT 
+          });
+          
+          // Filter to messages within the last 24 hours and not from bots
+          const recentMessages = messages.filter(msg => 
+            msg.createdAt >= oneDayAgo && 
+            !msg.author.bot
+          );
+          
+          console.log(`[MESSAGE_SYNC] Processing ${recentMessages.size} messages from last 24h in #${(channel as TextChannel).name}`);
+          
+          // Process each message similar to the message event handler
+          for (const [msgId, message] of recentMessages) {
+            // Skip if we've already processed this message (unlikely but possible)
+            if (processedMessageIdsByGuild[guild.id]?.has(msgId)) {
+              continue;
+            }
+            
+            // Mark as processed
+            if (!processedMessageIdsByGuild[guild.id]) {
+              processedMessageIdsByGuild[guild.id] = new Set<string>();
+            }
+            processedMessageIdsByGuild[guild.id].add(msgId);
+            
+            // Check for papers/PDFs
+            let foundPaper = false;
+            
+            // Check attachments for PDFs
+            if (message.attachments.size > 0) {
+              for (const attachment of message.attachments.values()) {
+                if (attachment.contentType?.startsWith('application/pdf') || 
+                    attachment.name?.toLowerCase().endsWith('.pdf')) {
+                  foundPaper = true;
+                  break;
+                }
+              }
+            }
+            
+            // Check content for paper links
+            if (!foundPaper) {
+              foundPaper = detectPaper(message.content, false);
+            }
+            
+            // Count paper if found
+            if (foundPaper) {
+              totalPapersFound++;
+            }
+            
+            // Only count non-low-value messages
+            if (!isLowValueMessage(message.content)) {
+              totalProcessedMessages++;
+              
+              // Add to message history for quality evaluation
+              const stats = guildStats.get(guild.id);
+              if (stats) {
+                // Add user to active users
+                stats.activeUsers.add(message.author.id);
+                
+                // Add to history array
+                const messageHistoryArray = guildMessageHistory.get(guild.id) || [];
+                messageHistoryArray.push({
+                  userId: message.author.id,
+                  content: message.content,
+                  timestamp: message.createdAt,
+                  qualityScore: 50 // Default score
+                });
+                
+                // Keep history within size limit
+                if (messageHistoryArray.length > MESSAGE_CONFIG.HISTORY_SIZE) {
+                  messageHistoryArray.shift();
+                }
+                
+                guildMessageHistory.set(guild.id, messageHistoryArray);
+              }
+            }
+          }
+        } catch (channelError) {
+          console.error(`[MESSAGE_SYNC] Error processing channel #${(channel as TextChannel).name}:`, channelError);
+          // Continue with next channel
+        }
+      }
+      
+      // Update stats with the processed messages
+      if (totalProcessedMessages > 0 || totalPapersFound > 0) {
+        const stats = guildStats.get(guild.id);
+        if (stats) {
+          // Update in-memory stats
+          stats.messageCount += totalProcessedMessages;
+          stats.papersShared += totalPapersFound;
+          guildStats.set(guild.id, stats);
+          
+          // Update global maps for compatibility
+          messageCountByGuild[guild.id] = stats.messageCount;
+          papersSharedByGuild[guild.id] = stats.papersShared;
+          
+          // Update database
+          await prisma.discord.update({
+            where: { id: discordRecord.id },
+            data: {
+              messagesCount: stats.messageCount,
+              papersShared: stats.papersShared
+            }
+          });
+          
+          console.log(`[MESSAGE_SYNC] Successfully synced ${totalProcessedMessages} messages and ${totalPapersFound} papers for ${guild.name}`);
+        }
+      } else {
+        console.log(`[MESSAGE_SYNC] No new messages found to sync for ${guild.name}`);
+      }
+    } catch (syncError) {
+      console.error(`[MESSAGE_SYNC] Error syncing messages for ${guild.name}:`, syncError);
+    }
+  }
+  
+  // Notify API and schedule quality evaluation
   notifyPortalAPI(guild.id, 'stats_update');
   setInterval(() => {
     evaluateMessageQuality(guild.id);
   }, MESSAGE_CONFIG.QUALITY_CHECK_INTERVAL_MS);
+  
   // Set in-memory for compatibility, but never use as source of truth
-  messageCountByGuild[guild.id] = dbMessages;
-  papersSharedByGuild[guild.id] = dbPapers;
+  messageCountByGuild[guild.id] = guildStats.get(guild.id)?.messageCount || dbMessages;
+  papersSharedByGuild[guild.id] = guildStats.get(guild.id)?.papersShared || dbPapers;
   qualityScoreByGuild[guild.id] = dbQuality;
 }
 
@@ -597,42 +801,6 @@ client.on(Events.MessageCreate, async (message: Message) => {
       console.error(`[PAPER_TRACK] Error updating paper count in DB:`, dbError);
     }
   }
-  
-  // Simple low value message detection implementation
-  const isLowValueMessage = (content: string): boolean => {
-    // Normalize the content
-    const normalizedContent = content.toLowerCase().trim();
-    
-    // Skip messages that are too short
-    if (normalizedContent.length < 5) {
-      return true;
-    }
-    
-    // Common greetings and basic responses
-    const lowValuePatterns = [
-      /^(hi|hey|hello|sup|yo|gm|good morning|good evening|good night|gn|bye)$/i,
-      /^(what'?s up|how are you|how's it going)$/i,
-      /^(nice|cool|great|awesome|amazing|good|bad|sad|happy)$/i,
-      /^((?:ha){1,5})$/i, // matches: ha, haha, hahaha, etc.
-      /^[👋👍👎❤️😂🙏]+$/u, // just emojis
-    ];
-    
-    // Check against common low-value patterns
-    for (const pattern of lowValuePatterns) {
-      if (pattern.test(normalizedContent)) {
-        return true;
-      }
-    }
-    
-    // Count words - messages with only 1-2 words are usually low value
-    const wordCount = normalizedContent.split(/\s+/).filter((word) => word.length > 0).length;
-    if (wordCount <= 2) {
-      return true;
-    }
-    
-    // Not a low-value message
-    return false;
-  };
   
   // Skip low value messages for count, but still process papers
   const isLowValue = isLowValueMessage(message.content);
