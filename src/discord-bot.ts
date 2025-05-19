@@ -28,7 +28,7 @@ import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
-import fetch from 'node-fetch';
+
 
 // Fix for missing types for pdf-parse
 // @ts-ignore
@@ -2006,8 +2006,7 @@ async function handleUploadCommand(interaction: ChatInputCommandInteraction) {
 
     // Download & Parse
     // Import node-fetch properly
-    const nodeFetch = await import('node-fetch').then(module => module.default);
-    const response = await nodeFetch(validFile.url);
+    const response = await fetch(validFile.url);
     if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.statusText}`);
     const buffer = await response.arrayBuffer();
     const data = await pdfParse(Buffer.from(buffer));
