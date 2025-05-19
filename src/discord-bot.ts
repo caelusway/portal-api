@@ -28,6 +28,8 @@ import { WebSocketServer, WebSocket as WS } from 'ws';
 import { checkAndPerformLevelUp, checkAndUpdateUserLevel, handleBotInstalled } from './websocket/ws.service';
 import { sendLevelUpEmail, sendSandboxEmail } from './services/email.service';
 import { activeConnections } from './websocket/ws.service';
+import fetch from 'node-fetch';
+
 // Fix for missing types for pdf-parse
 // @ts-ignore
 import pdfParse from 'pdf-parse';
@@ -1903,13 +1905,9 @@ async function handleSummarizeCommand(interaction: ChatInputCommandInteraction) 
     await interaction.deferReply(); // Use deferReply here
     console.log('[Summarize] Reply deferred. Processing PDF...');
 
-    // Import node-fetch properly using dynamic import
-    // Use a simpler implementation that avoids type issues
-    const nodeFetch = await import('node-fetch').then(module => module.default);
-
     // Download the PDF
     console.log(`[Summarize] Fetching PDF from: ${file?.url}`);
-    const response = await nodeFetch(file?.url || '');
+    const response = await fetch(file?.url || '');
     if (!response.ok) {
         throw new Error(`Failed to fetch PDF: ${response.statusText}`);
     }
