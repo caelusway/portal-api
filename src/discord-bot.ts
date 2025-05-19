@@ -417,10 +417,44 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
     try {
       console.log(`[MESSAGE_SYNC] Starting message sync for the last 12 hours in ${guild.name}...`);
       
-      // Calculate timestamp for 24 hours ago
+      // Calculate timestamp for 12 hours ago
       const oneDayAgo = new Date();
       oneDayAgo.setHours(oneDayAgo.getHours() - 12);
       console.log(`[DEBUG] Messages since: ${oneDayAgo.toISOString()}`);
+      
+      // Additional protection against double-counting:
+      // 1. Initialize processed message IDs map if not exists
+      if (!processedMessageIdsByGuild[guild.id]) {
+        processedMessageIdsByGuild[guild.id] = new Set<string>();
+      }
+
+      // 2. Load a list of last processed message IDs from the guild description if available
+      // This provides persistence across bot restarts
+      try {
+        // The bot might store processed message IDs in various places - one option is in a channel topic
+        // Another approach is to use a dedicated tracking channel
+        const systemChannel = guild.systemChannel || guild.channels.cache.find(
+          ch => ch.name === 'bot-logs' || ch.name === 'message-tracking'
+        ) as TextChannel;
+        
+        if (systemChannel?.topic) {
+          const match = systemChannel.topic.match(/LastProcessedTime:(\d+)/);
+          if (match && match[1]) {
+            const lastProcessTime = parseInt(match[1], 10);
+            if (!isNaN(lastProcessTime)) {
+              // If we have a valid timestamp, use it to skip messages older than last process time
+              const lastProcessDate = new Date(lastProcessTime);
+              if (lastProcessDate > oneDayAgo) {
+                // Use the more recent timestamp to avoid reprocessing
+                oneDayAgo.setTime(lastProcessDate.getTime());
+                console.log(`[DEBUG] Using last processed time from channel topic: ${oneDayAgo.toISOString()}`);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[DEBUG] Error reading last process time:`, err);
+      }
       
       // Get all accessible text channels
       const textChannels = guild.channels.cache.filter(
@@ -555,11 +589,27 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
               messagesCount: updateResult.messagesCount,
               papersShared: updateResult.papersShared
             })}`);
+            
+            // Store the current time in a system channel topic for future reference
+            try {
+              const systemChannel = guild.systemChannel || guild.channels.cache.find(
+                ch => ch.name === 'bot-logs' || ch.name === 'message-tracking'
+              ) as TextChannel;
+              
+              if (systemChannel?.manageable) {
+                const currentTopic = systemChannel.topic || '';
+                const newTopic = currentTopic.replace(/LastProcessedTime:\d+/, '') + 
+                                `LastProcessedTime:${Date.now()}`;
+                await systemChannel.setTopic(newTopic.substring(0, 1024));
+                console.log(`[DEBUG] Updated last process time in channel topic`);
+              }
+            } catch (topicError) {
+              console.error(`[DEBUG] Error updating channel topic:`, topicError);
+              // Non-critical error, can continue
+            }
           } catch (updateError) {
             console.error(`[DEBUG] Failed to update DB with new counts:`, updateError);
           }
-          
-          console.log(`[MESSAGE_SYNC] Successfully synced ${totalProcessedMessages} messages and ${totalPapersFound} papers for ${guild.name}`);
         } else {
           console.log(`[DEBUG] Stats for guild ${guild.id} unexpectedly missing after processing messages`);
         }
@@ -833,7 +883,7 @@ client.on(Events.MessageCreate, async (message: Message) => {
       
       if (discordRecord) {
         await prisma.discord.update({
-          where: { id: discordRecord.id },
+              where: { id: discordRecord.id },
           data: { papersShared: updatedStats.papersShared }
         });
         console.log(`[PAPER_TRACK] Updated paper count in DB for guild ${guildId}`);
@@ -938,7 +988,7 @@ async function saveDiscordMember(member: GuildMember): Promise<void> {
     console.log(`[MEMBER_SAVE] Member ${member.user.tag} does not exist. Creating new record.`);
     // Create the new member record
     const newMemberRecord = await prisma.discordMember.create({
-      data: {
+              data: {
         discordId: member.user.id,
         discordUsername: member.user.tag,
         discordAvatar: member.user.displayAvatarURL(),
