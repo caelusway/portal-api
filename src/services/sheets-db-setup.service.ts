@@ -12,6 +12,7 @@ const pool = new Pool({
 /**
  * Format a relative time string for database storage
  * Returns strings like "just now", "5 minutes ago", etc.
+ * @deprecated This function is kept for backward compatibility but is no longer used
  */
 function formatRelativeTimeSQL(): string {
   return `
@@ -38,14 +39,13 @@ function formatRelativeTimeSQL(): string {
 }
 
 /**
- * Format date with timezone, local time, and relative format
+ * Format date with timezone and local time
  * Uses America/New_York timezone (US Eastern Time)
- * Returns strings like "2023-05-15 3:45 PM ET (2 days ago)"
+ * Returns strings like "2023-05-15 3:45 PM ET"
  */
 function formatDateWithRelativeSQL(): string {
   return `
-    to_char(COALESCE("updatedAt", now()) AT TIME ZONE 'America/New_York', 'YYYY-MM-DD hh:MI AM') || ' ET (' || 
-    ${formatRelativeTimeSQL()} || ')'
+    to_char(COALESCE("updatedAt", now()) AT TIME ZONE 'America/New_York', 'YYYY-MM-DD hh:MI AM') || ' ET'
   `;
 }
 
@@ -143,7 +143,7 @@ export async function setupDatabaseTriggersAndQueue(): Promise<void> {
           IF TG_OP = 'UPDATE' OR TG_OP = 'INSERT' THEN
             -- Get the current time in US Eastern timezone
             DECLARE
-              current_time_eastern text := ${getCurrentTimeInUSEastern()} || ' (just now)';
+              current_time_eastern text := ${getCurrentTimeInUSEastern()};
             BEGIN
               EXECUTE format('UPDATE %I.%I SET "lastActivity" = $2 WHERE id = $1', 
                           TG_TABLE_SCHEMA, TG_TABLE_NAME) 
@@ -178,7 +178,7 @@ export async function setupDatabaseTriggersAndQueue(): Promise<void> {
           BEGIN
             -- Get the current time in US Eastern timezone
             DECLARE
-              current_time_eastern text := ${getCurrentTimeInUSEastern()} || ' (just now)';
+              current_time_eastern text := ${getCurrentTimeInUSEastern()};
             BEGIN
               -- Try to update the project's lastActivity field
               -- Using dynamic SQL in EXECUTE to avoid issues with quoted identifiers

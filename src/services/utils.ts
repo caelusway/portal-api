@@ -49,10 +49,10 @@ export function formatRelativeTime(date: Date): string {
 }
 
 /**
- * Stores the date in a standard format along with the relative format
- * This is useful for sorting while still showing relative time
+ * Formats a date in standard US Eastern time format
+ * This removes the relative time portion that was previously included
  * @param date The date to format
- * @returns A string with US Eastern time and relative time like "2023-05-15 3:45 PM ET (2 days ago)"
+ * @returns A string with US Eastern time like "2023-05-15 3:45 PM ET"
  */
 export function formatDateWithRelative(date: Date): string {
   // Convert to US Eastern timezone
@@ -68,8 +68,7 @@ export function formatDateWithRelative(date: Date): string {
   };
   
   const easternTime = new Intl.DateTimeFormat('en-US', dateTimeOptions).format(date);
-  const relativeTime = formatRelativeTime(date);
   
   // Add ET for Eastern Time explicitly
-  return `${easternTime} ET (${relativeTime})`;
+  return `${easternTime} ET`;
 } 

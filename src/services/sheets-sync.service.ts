@@ -384,8 +384,8 @@ function formatProjectToRow(record: any, discordRecord: any = null): any[] {
       lastActivityTime = new Date();
     }
     
-    // Convert to formatted date with human-readable relative time
-    // Format: "2023-05-15 3:45 PM ET (2 days ago)"
+    // Convert to formatted date in Eastern time format
+    // Format: "2023-05-15 3:45 PM ET"
     const formattedTime = formatDateWithRelative(lastActivityTime);
     rowData[lastActivityIndex] = formattedTime;
     console.log(`[SHEETS_SYNC] Set lastActivity at position ${lastActivityIndex} (column ${String.fromCharCode('A'.charCodeAt(0) + lastActivityIndex)}) to ${rowData[lastActivityIndex]}`);

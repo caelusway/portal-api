@@ -16,7 +16,8 @@
     "process-sheets-queue": "ts-node src/scripts/process-sheets-sync-queue.ts",
     "update-last-activity": "ts-node src/scripts/update-last-activity.ts",
     "check-db": "ts-node src/scripts/check-db-schema.ts",
-    "check-google": "ts-node src/scripts/check-google-credentials.ts"
+    "check-google": "ts-node src/scripts/check-google-credentials.ts",
+    "delete-unnamed-projects": "ts-node src/scripts/delete-unnamed-projects.ts"
   },
   "keywords": [
     "biodao",
