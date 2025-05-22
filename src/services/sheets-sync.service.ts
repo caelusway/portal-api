@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import prisma from './db.service';
+import { formatRelativeTime, formatDateWithRelative } from './utils';
 
 dotenv.config();
 
@@ -19,12 +20,13 @@ const GOOGLE_SHEETS_SCOPES = [
 ];
 
 // Define expected column structure as a constant
+// lastActivity is a timestamp showing when the project or its Discord data was last updated
 const EXPECTED_COLUMN_STRUCTURE = [
   "id", "level", "projectName", "projectDescription", "projectVision", 
   "projectLinks", "referralSource", "scientificReferences", "credentialLinks", 
   "teamMembers", "motivation", "progress", 
   "id (Discord)", "serverId", "serverName", "invitationUrl",
-  "messagesCount", "papersShared", "qualityScore", "memberCount"
+  "messagesCount", "papersShared", "qualityScore", "memberCount", "lastActivity"
 ];
 
 // Cache for validated column indices
@@ -357,6 +359,38 @@ function formatProjectToRow(record: any, discordRecord: any = null): any[] {
     });
   }
 
+  // Add lastActivity timestamp - use the most recent activity time available
+  const lastActivityIndex = EXPECTED_COLUMN_STRUCTURE.indexOf("lastActivity");
+  if (lastActivityIndex !== -1) {
+    // Use Discord's last message timestamp or updatedAt if available
+    let lastActivityTime = null;
+    
+    // Try to get Discord's last activity
+    if (discordRecord) {
+      if (discordRecord.lastMessageTimestamp) {
+        lastActivityTime = new Date(discordRecord.lastMessageTimestamp);
+      } else if (discordRecord.updatedAt) {
+        lastActivityTime = new Date(discordRecord.updatedAt);
+      }
+    }
+    
+    // If no Discord activity, use project's updatedAt
+    if (!lastActivityTime && record.updatedAt) {
+      lastActivityTime = new Date(record.updatedAt);
+    }
+    
+    // If no timestamps found, use current time
+    if (!lastActivityTime) {
+      lastActivityTime = new Date();
+    }
+    
+    // Convert to formatted date with human-readable relative time
+    // Format: "2023-05-15 3:45 PM ET (2 days ago)"
+    const formattedTime = formatDateWithRelative(lastActivityTime);
+    rowData[lastActivityIndex] = formattedTime;
+    console.log(`[SHEETS_SYNC] Set lastActivity at position ${lastActivityIndex} (column ${String.fromCharCode('A'.charCodeAt(0) + lastActivityIndex)}) to ${rowData[lastActivityIndex]}`);
+  }
+
   // Verify the final row length matches expected column count
   if (rowData.length !== EXPECTED_COLUMN_STRUCTURE.length) {
     console.error(`[SHEETS_SYNC] WARNING: Row data length (${rowData.length}) does not match expected column count (${EXPECTED_COLUMN_STRUCTURE.length})`);
@@ -611,7 +645,7 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
         
         try {
           // Check if sheet needs headers (for first time setup)
-          const headersCheckUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:T1`;
+          const headersCheckUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:U1`;
           const headersResponse = await axios.get(
             headersCheckUrl, 
             { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -906,7 +940,7 @@ async function validateSpreadsheetColumns(accessToken: string, forceRefresh = fa
   
   try {
     // Fetch the header row
-    const headerRange = `${SHEET_NAME}!A1:T1`;
+    const headerRange = `${SHEET_NAME}!A1:U1`;
     const url = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${headerRange}`;
     
     const response = await axios.get(url, {
@@ -948,11 +982,50 @@ async function validateSpreadsheetColumns(accessToken: string, forceRefresh = fa
       }
     });
     
-    // Log validation results
+    // If there are missing columns, add them to the spreadsheet
     if (hasMissingColumns) {
-      const errorMsg = `Spreadsheet is missing required columns: ${missingColumns.join(', ')}`;
-      console.error(`[SHEETS_VALIDATE] ${errorMsg}`);
-      throw new Error(errorMsg);
+      console.log(`[SHEETS_VALIDATE] Found ${missingColumns.length} missing columns: ${missingColumns.join(', ')}`);
+      console.log(`[SHEETS_VALIDATE] Adding missing columns to the spreadsheet...`);
+      
+      // Get the current last column index
+      const lastColIndex = headerRow.length;
+      const lastColLetter = String.fromCharCode('A'.charCodeAt(0) + lastColIndex);
+      
+      // Prepare the new columns data
+      const newColumnsData = missingColumns.map((column, index) => {
+        const colIndex = lastColIndex + index;
+        columnIndices[column] = colIndex; // Update indices map with new columns
+        
+        return {
+          column,
+          index: colIndex,
+          letter: String.fromCharCode('A'.charCodeAt(0) + colIndex)
+        };
+      });
+      
+      // Log what we're adding
+      newColumnsData.forEach(col => {
+        console.log(`[SHEETS_VALIDATE] Adding column "${col.column}" at position ${col.index} (Column ${col.letter})`);
+      });
+      
+      // Add the columns one by one
+      for (const col of newColumnsData) {
+        const updateUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!${col.letter}1?valueInputOption=RAW`;
+        
+        try {
+          await axios.put(
+            updateUrl,
+            { values: [[col.column]] },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          console.log(`[SHEETS_VALIDATE] Successfully added column "${col.column}" at ${col.letter}1`);
+        } catch (addError) {
+          console.error(`[SHEETS_VALIDATE] Error adding column "${col.column}":`, addError);
+          throw new Error(`Failed to add missing column ${col.column}: ${addError instanceof Error ? addError.message : String(addError)}`);
+        }
+      }
+      
+      console.log(`[SHEETS_VALIDATE] Successfully added all missing columns`);
     }
     
     if (hasColumnOrderMismatch) {
@@ -965,7 +1038,8 @@ async function validateSpreadsheetColumns(accessToken: string, forceRefresh = fa
       'messagesCount': columnIndices['messagesCount'],
       'papersShared': columnIndices['papersShared'],
       'qualityScore': columnIndices['qualityScore'],
-      'memberCount': columnIndices['memberCount']
+      'memberCount': columnIndices['memberCount'],
+      'lastActivity': columnIndices['lastActivity']
     };
     
     console.log(`[SHEETS_VALIDATE] Discord metrics column mapping:`, discordMetricIndices);
@@ -1005,8 +1079,8 @@ async function validateSpreadsheetColumns(accessToken: string, forceRefresh = fa
  */
 export async function updateDiscordMetric(
   projectId: string, 
-  metricName: 'messagesCount' | 'papersShared' | 'qualityScore' | 'memberCount', 
-  value: number
+  metricName: 'messagesCount' | 'papersShared' | 'qualityScore' | 'memberCount' | 'lastActivity', 
+  value: number | string
 ): Promise<string> {
   try {
     console.log(`[SHEETS_SYNC] Updating Discord metric "${metricName}" to ${value} for project ${projectId}`);
@@ -1071,7 +1145,7 @@ export async function updateDiscordMetric(
     
     // Double-check the column index by fetching the header value in that position
     try {
-      const headerCheckUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:T1`;
+      const headerCheckUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:U1`;
       const headerResponse = await axios.get(headerCheckUrl, {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
@@ -1162,11 +1236,20 @@ export async function updateMemberCount(projectId: string, count: number): Promi
   return updateDiscordMetric(projectId, 'memberCount', count);
 }
 
+/**
+ * Utility function for directly updating last activity timestamp
+ */
+export async function updateLastActivity(projectId: string, timestamp?: Date): Promise<string> {
+  const activityTime = timestamp || new Date();
+  const formattedTime = formatDateWithRelative(activityTime);
+  return updateDiscordMetric(projectId, 'lastActivity', formattedTime);
+}
+
 // Helper function to sync Discord stats to Google Sheets - add near the top after function declarations
 export async function syncDiscordStatsToSheets(
   guildId: string,
-  specificMetric?: 'messagesCount' | 'papersShared' | 'qualityScore' | 'memberCount',
-  value?: number
+  specificMetric?: 'messagesCount' | 'papersShared' | 'qualityScore' | 'memberCount' | 'lastActivity',
+  value?: number | string
 ): Promise<void> {
   try {
     // Find the Discord record to get the projectId

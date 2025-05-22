@@ -10,6 +10,54 @@ const pool = new Pool({
 });
 
 /**
+ * Format a relative time string for database storage
+ * Returns strings like "just now", "5 minutes ago", etc.
+ */
+function formatRelativeTimeSQL(): string {
+  return `
+    CASE
+      WHEN "updatedAt" IS NULL THEN 'just now'
+      WHEN age(now(), "updatedAt") < interval '1 minute' THEN 'just now'
+      WHEN age(now(), "updatedAt") < interval '1 hour' THEN 
+        EXTRACT(minute FROM age(now(), "updatedAt"))::integer || 
+        CASE WHEN EXTRACT(minute FROM age(now(), "updatedAt"))::integer = 1 THEN ' minute ago' ELSE ' minutes ago' END
+      WHEN age(now(), "updatedAt") < interval '1 day' THEN 
+        EXTRACT(hour FROM age(now(), "updatedAt"))::integer || 
+        CASE WHEN EXTRACT(hour FROM age(now(), "updatedAt"))::integer = 1 THEN ' hour ago' ELSE ' hours ago' END
+      WHEN age(now(), "updatedAt") < interval '30 days' THEN 
+        EXTRACT(day FROM age(now(), "updatedAt"))::integer || 
+        CASE WHEN EXTRACT(day FROM age(now(), "updatedAt"))::integer = 1 THEN ' day ago' ELSE ' days ago' END
+      WHEN age(now(), "updatedAt") < interval '1 year' THEN 
+        (EXTRACT(month FROM age(now(), "updatedAt")) + EXTRACT(year FROM age(now(), "updatedAt")) * 12)::integer || 
+        CASE WHEN (EXTRACT(month FROM age(now(), "updatedAt")) + EXTRACT(year FROM age(now(), "updatedAt")) * 12)::integer = 1 THEN ' month ago' ELSE ' months ago' END
+      ELSE
+        EXTRACT(year FROM age(now(), "updatedAt"))::integer || 
+        CASE WHEN EXTRACT(year FROM age(now(), "updatedAt"))::integer = 1 THEN ' year ago' ELSE ' years ago' END
+    END
+  `;
+}
+
+/**
+ * Format date with timezone, local time, and relative format
+ * Uses America/New_York timezone (US Eastern Time)
+ * Returns strings like "2023-05-15 3:45 PM ET (2 days ago)"
+ */
+function formatDateWithRelativeSQL(): string {
+  return `
+    to_char(COALESCE("updatedAt", now()) AT TIME ZONE 'America/New_York', 'YYYY-MM-DD hh:MI AM') || ' ET (' || 
+    ${formatRelativeTimeSQL()} || ')'
+  `;
+}
+
+/**
+ * Get current date/time in US Eastern timezone with format
+ * Returns a string like "2023-05-15 3:45 PM ET"
+ */
+function getCurrentTimeInUSEastern(): string {
+  return `to_char(now() AT TIME ZONE 'America/New_York', 'YYYY-MM-DD hh:MI AM') || ' ET'`;
+}
+
+/**
  * Setup database triggers and functions for automatic Google Sheets syncing
  * This creates the necessary PostgreSQL functions, triggers, and queue table.
  * 
@@ -86,6 +134,27 @@ export async function setupDatabaseTriggersAndQueue(): Promise<void> {
         -- Add project_id to a queue table that your application will process
         INSERT INTO sheets_sync_queue (record_id, record_type, operation)
         VALUES (NEW.id, 'project', TG_OP);
+        
+        -- Update the lastActivity timestamp if the column exists
+        BEGIN
+          -- Try to update the lastActivity field in the same transaction
+          -- This avoids needing a separate UPDATE statement later
+          -- We use dynamic SQL to handle quoted identifiers properly
+          IF TG_OP = 'UPDATE' OR TG_OP = 'INSERT' THEN
+            -- Get the current time in US Eastern timezone
+            DECLARE
+              current_time_eastern text := ${getCurrentTimeInUSEastern()} || ' (just now)';
+            BEGIN
+              EXECUTE format('UPDATE %I.%I SET "lastActivity" = $2 WHERE id = $1', 
+                          TG_TABLE_SCHEMA, TG_TABLE_NAME) 
+              USING NEW.id, current_time_eastern;
+            END;
+          END IF;
+        EXCEPTION WHEN undefined_column THEN
+          -- If lastActivity column doesn't exist yet, we can ignore this error
+          RAISE NOTICE 'Project table does not have lastActivity column yet. Skipping update.';
+        END;
+        
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;
@@ -104,6 +173,23 @@ export async function setupDatabaseTriggersAndQueue(): Promise<void> {
           -- Add the project_id to the queue instead of discord_id
           INSERT INTO sheets_sync_queue (record_id, record_type, operation)
           VALUES (NEW."projectId", 'project', TG_OP);
+          
+          -- Update last activity timestamp in the project record if possible
+          BEGIN
+            -- Get the current time in US Eastern timezone
+            DECLARE
+              current_time_eastern text := ${getCurrentTimeInUSEastern()} || ' (just now)';
+            BEGIN
+              -- Try to update the project's lastActivity field
+              -- Using dynamic SQL in EXECUTE to avoid issues with quoted identifiers
+              EXECUTE format('UPDATE %I.%I SET "lastActivity" = $2 WHERE id = $1', 
+                          TG_TABLE_SCHEMA, 'Project') 
+              USING NEW."projectId", current_time_eastern;
+            END;
+          EXCEPTION WHEN undefined_column THEN
+            -- If lastActivity column doesn't exist yet, we can ignore this error
+            RAISE NOTICE 'Project table does not have lastActivity column yet. Skipping update.';
+          END;
         END IF;
         RETURN NEW;
       END;
