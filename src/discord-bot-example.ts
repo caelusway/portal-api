@@ -273,15 +273,39 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
 
 // Scientific paper domains used for paper detection
 const SCIENTIFIC_DOMAINS = [
+  'doi.org',
   'arxiv.org',
+  'nature.com',
+  'sciencedirect.com',
+  'science.org',
+  'link.springer.com',
+  'cell.com',
+  'onlinelibrary.wiley.com',
+  'pubs.acs.org',
+  'journals.plos.org',
+  'frontiersin.org',
+  'tandfonline.com',
+  'academic.oup.com',
+  'cambridge.org',
+  'elifesciences.org',
+  'mdpi.com',
   'biorxiv.org',
   'medrxiv.org',
-  'nature.com',
-  'science.org',
-  'cell.com',
-  'pnas.org',
+  'chemrxiv.org',
+  'psyarxiv.com',
+  'osf.io',
+  'pubmed.ncbi.nlm.nih.gov',
   'ncbi.nlm.nih.gov',
-  'pubmed.gov',
+  'core.ac.uk',
+  'paperswithcode.com',
+  'github.com',
+  'researchgate.net',
+  'jstor.org',
+  'scholar.google.com',
+  'pnas.org',
+  'plos.org',
+  'sciencemag.org',
+  'jbc.org',
 ];
 
 /**
@@ -586,10 +610,52 @@ async function extractPaperMetadata(url: string, content?: string): Promise<Pape
     metadata.platform = 'biorxiv';
   } else if (url.includes('medrxiv.org')) {
     metadata.platform = 'medrxiv';
+  } else if (url.includes('chemrxiv.org')) {
+    metadata.platform = 'chemrxiv';
+  } else if (url.includes('psyarxiv.com')) {
+    metadata.platform = 'psyarxiv';
   } else if (url.includes('pubmed') || url.includes('ncbi.nlm.nih.gov')) {
     metadata.platform = 'pubmed';
   } else if (url.includes('researchgate.net')) {
     metadata.platform = 'researchgate';
+  } else if (url.includes('sciencedirect.com')) {
+    metadata.platform = 'sciencedirect';
+  } else if (url.includes('link.springer.com')) {
+    metadata.platform = 'springer';
+  } else if (url.includes('onlinelibrary.wiley.com')) {
+    metadata.platform = 'wiley';
+  } else if (url.includes('pubs.acs.org')) {
+    metadata.platform = 'acs';
+  } else if (url.includes('journals.plos.org')) {
+    metadata.platform = 'plos';
+  } else if (url.includes('frontiersin.org')) {
+    metadata.platform = 'frontiers';
+  } else if (url.includes('tandfonline.com')) {
+    metadata.platform = 'taylor_francis';
+  } else if (url.includes('academic.oup.com')) {
+    metadata.platform = 'oxford';
+  } else if (url.includes('cambridge.org')) {
+    metadata.platform = 'cambridge';
+  } else if (url.includes('elifesciences.org')) {
+    metadata.platform = 'elife';
+  } else if (url.includes('mdpi.com')) {
+    metadata.platform = 'mdpi';
+  } else if (url.includes('osf.io')) {
+    metadata.platform = 'osf';
+  } else if (url.includes('core.ac.uk')) {
+    metadata.platform = 'core';
+  } else if (url.includes('paperswithcode.com')) {
+    metadata.platform = 'paperswithcode';
+  } else if (url.includes('github.com')) {
+    metadata.platform = 'github';
+  } else if (url.includes('jstor.org')) {
+    metadata.platform = 'jstor';
+  } else if (url.includes('scholar.google.com')) {
+    metadata.platform = 'google_scholar';
+  } else if (url.includes('pnas.org')) {
+    metadata.platform = 'pnas';
+  } else if (url.includes('doi.org')) {
+    metadata.platform = 'doi';
   } else if (url.toLowerCase().endsWith('.pdf')) {
     metadata.platform = 'pdf';
   }
