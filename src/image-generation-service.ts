@@ -52,7 +52,7 @@ export async function generateIdeaNFTImage(
         prompt: prompt,
         n: 1,
         size: '1024x1024',
-        quality: 'standard',
+        quality: 'medium',
       });
     } catch (primaryError) {
       console.warn('gpt-image-1 failed, falling back to dall-e-3:', primaryError);
@@ -103,7 +103,7 @@ export async function generateVisionNFTImage(projectId: string, vision: string):
         prompt: prompt,
         n: 1,
         size: '1024x1024',
-        quality: 'standard',
+        quality: 'medium',
       });
     } catch (primaryError) {
       console.warn('gpt-image-1 failed, falling back to dall-e-3:', primaryError);
