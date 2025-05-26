@@ -370,21 +370,54 @@ client.on(Events.MessageCreate, async (message) => {
   // Initialize stats if needed
   initGuildStats(guildId);
 
-  // --- DKG PDF Upload Handling ---
-  if (dkgClient && message.attachments.size > 0) {
+  // Get Discord record for paper storage
+  const discordRecord = await prisma.discord.findFirst({
+    where: { serverId: guildId }
+  });
+
+  // --- Enhanced PDF and Paper Detection ---
+  let paperDetected = false;
+  const detectedPapers: PaperMetadata[] = [];
+  
+  // Check attachments for PDFs
+  if (message.attachments.size > 0) {
     for (const attachment of message.attachments.values()) {
       if (attachment.contentType?.startsWith('application/pdf') || attachment.name?.toLowerCase().endsWith('.pdf')) {
-        if (attachment.url) {
+        console.log(`[PDF_DETECT] PDF detected: ${attachment.name} in guild ${guildId}`);
+        paperDetected = true;
+        
+        // Extract metadata for PDF attachment
+        const pdfMetadata = await extractPaperMetadata(attachment.url, message.content);
+        pdfMetadata.title = pdfMetadata.title || attachment.name?.replace('.pdf', '') || 'Untitled PDF';
+        pdfMetadata.platform = 'pdf';
+        detectedPapers.push(pdfMetadata);
+
+        // --- DKG PDF Upload Handling ---
+        if (dkgClient && attachment.url) {
           handlePdfUploadToDKG(message, attachment)
             .then(() => console.log(`[DKG] Finished background processing PDF: ${attachment.name} from guild ${guildId}`))
             .catch(err => console.error(`[DKG] Background PDF processing error for ${attachment.name} from guild ${guildId}:`, err));
         } else {
-          console.warn(`[DKG] PDF attachment \"${attachment.name}\" in guild ${guildId} has no URL.`);
+          console.warn(`[DKG] PDF attachment \"${attachment.name}\" in guild ${guildId} has no URL or DKG client not initialized.`);
         }
       }
     }
   }
-  // --- End DKG PDF Upload Handling ---
+  
+  // Check for paper links in message content
+  const paperUrls = extractPaperUrls(message.content);
+  for (const url of paperUrls) {
+    paperDetected = true;
+    const paperMetadata = await extractPaperMetadata(url, message.content);
+    detectedPapers.push(paperMetadata);
+  }
+  
+  // Save all detected papers to database
+  if (detectedPapers.length > 0 && discordRecord) {
+    for (const paperMetadata of detectedPapers) {
+      await savePaperToDatabase(paperMetadata, message, discordRecord);
+    }
+  }
 
   // Check if this is a low-value message that shouldn't count
   const isLowValue = isLowValueMessage(message.content);
@@ -403,16 +436,10 @@ client.on(Events.MessageCreate, async (message) => {
     );
   }
 
-  // Check for paper with stricter detection logic
-  const hasPaperAttachment = message.attachments.some((a) =>
-    a.name?.toLowerCase().endsWith('.pdf')
-  );
-
-  if (detectPaper(message.content, hasPaperAttachment)) {
-    guildStats[guildId].papersShared++;
-    console.log(
-      `Scientific paper detected in guild ${guildId}. Total papers: ${guildStats[guildId].papersShared}`
-    );
+  // Update paper count if any papers were detected
+  if (paperDetected) {
+    guildStats[guildId].papersShared += detectedPapers.length;
+    console.log(`[PAPER_TRACK] Paper count increased by ${detectedPapers.length} to ${guildStats[guildId].papersShared} in guild ${guildId}`);
   }
 
   // Log message count milestones for non-low-value messages
@@ -495,3 +522,147 @@ process.on('SIGINT', () => {
   client.destroy();
   process.exit(0);
 });
+
+// Paper metadata interface
+interface PaperMetadata {
+  url: string;
+  title?: string;
+  authors?: string;
+  doi?: string;
+  platform?: string;
+}
+
+/**
+ * Extract paper URLs from message content
+ */
+function extractPaperUrls(content: string): string[] {
+  const urls: string[] = [];
+  
+  // DOI patterns
+  const doiMatches = content.match(/(?:https?:\/\/)?(?:www\.)?doi\.org\/10\.\d{4,}\/[\w\.\-\/\(\)]+/gi);
+  if (doiMatches) {
+    urls.push(...doiMatches.map(url => url.startsWith('http') ? url : `https://doi.org/${url.replace(/^doi\.org\//, '')}`));
+  }
+  
+  // Scientific domain URLs
+  for (const domain of SCIENTIFIC_DOMAINS) {
+    const regex = new RegExp(`https?:\\/\\/([\\w-]+\\.)*${domain.replace(/\./g, '\\.')}[\\/\\w\\.-]*`, 'gi');
+    const matches = content.match(regex);
+    if (matches) {
+      urls.push(...matches);
+    }
+  }
+  
+  // Generic URL pattern for potential papers
+  const genericUrls = content.match(/https?:\/\/[^\s]+\.pdf/gi);
+  if (genericUrls) {
+    urls.push(...genericUrls);
+  }
+  
+  return [...new Set(urls)]; // Remove duplicates
+}
+
+/**
+ * Extract paper metadata from URL and content
+ */
+async function extractPaperMetadata(url: string, content?: string): Promise<PaperMetadata> {
+  const metadata: PaperMetadata = { url };
+  
+  // Detect platform based on URL
+  if (url.includes('arxiv.org')) {
+    metadata.platform = 'arxiv';
+    // Extract arXiv ID and try to get title
+    const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d{4}\.\d{4,5})/);
+    if (arxivMatch) {
+      metadata.doi = `arXiv:${arxivMatch[1]}`;
+    }
+  } else if (url.includes('nature.com')) {
+    metadata.platform = 'nature';
+  } else if (url.includes('science.org')) {
+    metadata.platform = 'science';
+  } else if (url.includes('cell.com')) {
+    metadata.platform = 'cell';
+  } else if (url.includes('biorxiv.org')) {
+    metadata.platform = 'biorxiv';
+  } else if (url.includes('medrxiv.org')) {
+    metadata.platform = 'medrxiv';
+  } else if (url.includes('pubmed') || url.includes('ncbi.nlm.nih.gov')) {
+    metadata.platform = 'pubmed';
+  } else if (url.includes('researchgate.net')) {
+    metadata.platform = 'researchgate';
+  } else if (url.toLowerCase().endsWith('.pdf')) {
+    metadata.platform = 'pdf';
+  }
+  
+  // Extract DOI from URL or content
+  const doiMatch = (url + ' ' + (content || '')).match(/(?:doi:|doi\.org\/|10\.\d{4,}\/)(10\.\d{4,}\/[\w\.\-\/\(\)]+)/i);
+  if (doiMatch) {
+    metadata.doi = doiMatch[1];
+  }
+  
+  // Try to extract title from content if available
+  if (content) {
+    // Look for common title patterns in Discord messages
+    const titlePatterns = [
+      /"([^"]{10,200})"/,  // Quoted titles
+      /title:\s*([^\n]{10,200})/i,  // "title: ..."
+      /paper:\s*([^\n]{10,200})/i,  // "paper: ..."
+    ];
+    
+    for (const pattern of titlePatterns) {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        metadata.title = match[1].trim();
+        break;
+      }
+    }
+  }
+  
+  return metadata;
+}
+
+/**
+ * Save detected paper to database
+ */
+async function savePaperToDatabase(
+  paperMetadata: PaperMetadata,
+  message: Message,
+  discordRecord: any
+): Promise<void> {
+  try {
+    console.log(`[PAPER_SAVE] Saving paper to database: ${paperMetadata.url}`);
+    
+    // Check if this paper URL was already shared in this Discord server
+    const existingPaper = await prisma.discordPaper.findFirst({
+      where: {
+        url: paperMetadata.url,
+        discordId: discordRecord.id
+      }
+    });
+    
+    if (existingPaper) {
+      console.log(`[PAPER_SAVE] Paper already exists in database: ${paperMetadata.url}`);
+      return;
+    }
+    
+    // Create new paper record
+    await prisma.discordPaper.create({
+      data: {
+        url: paperMetadata.url,
+        title: paperMetadata.title,
+        authors: paperMetadata.authors,
+        doi: paperMetadata.doi,
+        platform: paperMetadata.platform,
+        messageId: message.id,
+        channelId: message.channel.id,
+        userId: message.author.id,
+        username: message.author.tag,
+        discordId: discordRecord.id,
+      }
+    });
+    
+    console.log(`[PAPER_SAVE] Successfully saved paper: ${paperMetadata.url} by ${message.author.tag}`);
+  } catch (error) {
+    console.error(`[PAPER_SAVE] Error saving paper to database:`, error);
+  }
+}

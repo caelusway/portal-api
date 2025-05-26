@@ -232,3 +232,148 @@ export function getNextLevelRequirements(currentLevel: number): string[] {
       return ["Unknown level"];
   }
 }
+
+/**
+ * Get papers shared in a Discord server
+ * @param projectId - The project ID to get papers for
+ * @returns Array of papers shared in the Discord server
+ */
+export async function getDiscordPapers(projectId: string): Promise<any[]> {
+  try {
+    const discord = await prisma.discord.findUnique({
+      where: { projectId },
+      include: {
+        papers: {
+          orderBy: { sharedAt: 'desc' },
+          take: 50 // Limit to last 50 papers
+        }
+      }
+    });
+
+    return discord?.papers || [];
+  } catch (error) {
+    console.error('Error fetching Discord papers:', error);
+    return [];
+  }
+}
+
+/**
+ * Get paper sharing statistics for a Discord server
+ * @param projectId - The project ID to get stats for
+ * @returns Paper sharing statistics
+ */
+export async function getDiscordPaperStats(projectId: string): Promise<{
+  totalPapers: number;
+  uniqueContributors: number;
+  platformBreakdown: Record<string, number>;
+  recentActivity: number; // Papers shared in last 7 days
+}> {
+  try {
+    const discord = await prisma.discord.findUnique({
+      where: { projectId },
+      include: {
+        papers: true
+      }
+    });
+
+    if (!discord || !discord.papers) {
+      return {
+        totalPapers: 0,
+        uniqueContributors: 0,
+        platformBreakdown: {},
+        recentActivity: 0
+      };
+    }
+
+    const papers = discord.papers;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Calculate statistics
+    const totalPapers = papers.length;
+    const uniqueContributors = new Set(papers.map(p => p.userId)).size;
+    const recentActivity = papers.filter(p => p.sharedAt >= sevenDaysAgo).length;
+
+    // Platform breakdown
+    const platformBreakdown: Record<string, number> = {};
+    papers.forEach(paper => {
+      const platform = paper.platform || 'unknown';
+      platformBreakdown[platform] = (platformBreakdown[platform] || 0) + 1;
+    });
+
+    return {
+      totalPapers,
+      uniqueContributors,
+      platformBreakdown,
+      recentActivity
+    };
+  } catch (error) {
+    console.error('Error calculating Discord paper stats:', error);
+    return {
+      totalPapers: 0,
+      uniqueContributors: 0,
+      platformBreakdown: {},
+      recentActivity: 0
+    };
+  }
+}
+
+/**
+ * Get top paper contributors in a Discord server
+ * @param projectId - The project ID to get contributors for
+ * @param limit - Number of top contributors to return (default: 10)
+ * @returns Array of top contributors with their paper counts
+ */
+export async function getTopPaperContributors(projectId: string, limit: number = 10): Promise<Array<{
+  userId: string;
+  username: string;
+  paperCount: number;
+  lastShared: Date;
+}>> {
+  try {
+    const discord = await prisma.discord.findUnique({
+      where: { projectId },
+      include: {
+        papers: {
+          orderBy: { sharedAt: 'desc' }
+        }
+      }
+    });
+
+    if (!discord || !discord.papers) {
+      return [];
+    }
+
+    // Group papers by user
+    const userPapers = discord.papers.reduce((acc, paper) => {
+      if (!acc[paper.userId]) {
+        acc[paper.userId] = {
+          userId: paper.userId,
+          username: paper.username,
+          papers: [],
+          lastShared: paper.sharedAt
+        };
+      }
+      acc[paper.userId].papers.push(paper);
+      if (paper.sharedAt > acc[paper.userId].lastShared) {
+        acc[paper.userId].lastShared = paper.sharedAt;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Convert to array and sort by paper count
+    const contributors = Object.values(userPapers)
+      .map(user => ({
+        userId: user.userId,
+        username: user.username,
+        paperCount: user.papers.length,
+        lastShared: user.lastShared
+      }))
+      .sort((a, b) => b.paperCount - a.paperCount)
+      .slice(0, limit);
+
+    return contributors;
+  } catch (error) {
+    console.error('Error getting top paper contributors:', error);
+    return [];
+  }
+}

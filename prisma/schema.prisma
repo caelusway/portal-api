@@ -116,6 +116,28 @@ model ScientificProfile {
   member      DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
 }
 
+model DiscordPaper {
+  id          String   @id @default(uuid())
+  url         String   // The paper URL or PDF link
+  title       String?  // Extracted or provided paper title
+  authors     String?  // Paper authors if available
+  doi         String?  // DOI if detected
+  platform    String?  // e.g., "arxiv", "nature", "biorxiv", "pdf"
+  messageId   String   // Discord message ID where paper was shared
+  channelId   String   // Discord channel ID where paper was shared
+  userId      String   // Discord user ID who shared the paper
+  username    String   // Discord username who shared the paper
+  sharedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  discordId   String   // Foreign key to Discord table
+  discord     Discord  @relation(fields: [discordId], references: [id], onDelete: Cascade)
+
+  @@index([discordId])
+  @@index([messageId])
+  @@index([sharedAt])
+}
+
 model Discord {
   id                String          @id @default(uuid())
   serverId          String          @unique
@@ -135,6 +157,7 @@ model Discord {
   projectId         String          @unique
   project           Project         @relation(fields: [projectId], references: [id])
   members           DiscordMember[]
+  papers            DiscordPaper[]  // New relation to papers
 }
 
 model ChatSession {
@@ -216,4 +239,14 @@ model DKGFile {
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+model sheets_sync_queue {
+  id           Int       @id @default(autoincrement())
+  record_id    String
+  record_type  String
+  operation    String
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  processed_at DateTime? @db.Timestamptz(6)
+  status       String?
 }

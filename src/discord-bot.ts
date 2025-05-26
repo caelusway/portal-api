@@ -75,7 +75,7 @@ interface GuildStats {
 
 const guildStats: Map<string, GuildStats> = new Map();
 
-// Paper detection keywords and patterns
+// Enhanced paper detection keywords and patterns
 const PAPER_KEYWORDS = [
   'research paper',
   'scientific paper',
@@ -112,6 +112,15 @@ const PAPER_DOMAINS = [
   'sciencemag.org',
   'jbc.org',
 ];
+
+// Enhanced paper detection with metadata extraction
+interface PaperMetadata {
+  url: string;
+  title?: string;
+  authors?: string;
+  doi?: string;
+  platform?: string;
+}
 
 // Message quality and spam detection configuration
 const MESSAGE_CONFIG = {
@@ -883,38 +892,44 @@ client.on(Events.MessageCreate, async (message: Message) => {
     return;
   }
   
-  // --- DKG PDF Upload Handling ---
+  // Get Discord record for paper storage
+  const discordRecord = await prisma.discord.findFirst({
+    where: { serverId: guildId }
+  });
+  
+  // --- Enhanced PDF and Paper Detection ---
   let paperDetected = false;
+  const detectedPapers: PaperMetadata[] = [];
+  
+  // Check attachments for PDFs
   if (message.attachments.size > 0) {
     for (const attachment of message.attachments.values()) {
       if (attachment.contentType?.startsWith('application/pdf') || attachment.name?.toLowerCase().endsWith('.pdf')) {
         console.log(`[PDF_DETECT] PDF detected: ${attachment.name} in guild ${guildId}`);
         paperDetected = true;
         
+        // Extract metadata for PDF attachment
+        const pdfMetadata = await extractEnhancedPaperMetadata(attachment.url, message.content);
+        pdfMetadata.title = pdfMetadata.title || attachment.name?.replace('.pdf', '') || 'Untitled PDF';
+        pdfMetadata.platform = 'pdf';
+        detectedPapers.push(pdfMetadata);
+        
         // Process PDF directly here without relying on external functions
-        if (attachment.url) {
+        if (attachment.url && discordRecord?.projectId) {
           console.log(`[PDF_PROCESS] Processing PDF: ${attachment.name} from guild ${guildId}`);
           try {
-            // Get the project ID from the database
-            const discordRecord = await prisma.discord.findFirst({
-              where: { serverId: guildId },
-              select: { projectId: true }
+            // Log the PDF detection to DKG table
+            await prisma.dKGFile.create({
+              data: {
+                hash: `temp-${Date.now()}`, // Temporary hash until actual DKG implementation
+                filename: attachment.name,
+                projectId: discordRecord.projectId,
+              }
             });
             
-            if (discordRecord?.projectId) {
-              // Log the PDF detection to DB directly
-              await prisma.dKGFile.create({
-                data: {
-                  hash: `temp-${Date.now()}`, // Temporary hash until actual DKG implementation
-                  filename: attachment.name,
-                  projectId: discordRecord.projectId,
-                }
-              });
-              
-              // Replace reply with emoji reaction
-              await message.react('📄'); // Paper emoji reaction
-              console.log(`[PDF_PROCESS] Successfully logged PDF: ${attachment.name} for project ${discordRecord.projectId}`);
-            }
+            // Replace reply with emoji reaction
+            await message.react('📄'); // Paper emoji reaction
+            console.log(`[PDF_PROCESS] Successfully logged PDF: ${attachment.name} for project ${discordRecord.projectId}`);
           } catch (uploadError) {
             console.error(`[PDF_PROCESS] Error processing PDF: ${attachment.name}`, uploadError);
           }
@@ -923,27 +938,35 @@ client.on(Events.MessageCreate, async (message: Message) => {
     }
   }
   
-  // Check for paper links in message
-  const hasPaperLink = detectPaper(message.content, paperDetected);
-  if (hasPaperLink || paperDetected) {
-    updatedStats.papersShared += 1;
-    console.log(`[PAPER_TRACK] Paper count increased to ${updatedStats.papersShared} in guild ${guildId}`);
+  // Check for paper links in message content
+  const paperUrls = extractPaperUrls(message.content);
+  for (const url of paperUrls) {
+    paperDetected = true;
+    const paperMetadata = await extractEnhancedPaperMetadata(url, message.content);
+    detectedPapers.push(paperMetadata);
+  }
+  
+  // Save all detected papers to database
+  if (detectedPapers.length > 0 && discordRecord) {
+    for (const paperMetadata of detectedPapers) {
+      await savePaperToDatabase(paperMetadata, message, discordRecord);
+    }
+  }
+  
+  // Update paper count if any papers were detected
+  if (paperDetected) {
+    updatedStats.papersShared += detectedPapers.length;
+    console.log(`[PAPER_TRACK] Paper count increased by ${detectedPapers.length} to ${updatedStats.papersShared} in guild ${guildId}`);
     papersSharedByGuild[guildId] = updatedStats.papersShared;
     
     try {
-      // Update the paper count in the database
-      const discordRecord = await prisma.discord.findFirst({ 
-        where: { serverId: guildId } 
-      });
-      
       if (discordRecord) {
-        // Fixed update - explicitly specify only the fields we want to update
-        // This prevents issues with reserved keywords like 'new'
+        // Update the paper count in the database
         await prisma.discord.update({
           where: { id: discordRecord.id },
           data: { 
             papersShared: updatedStats.papersShared 
-          } // Comment moved outside: ONLY include the specific fields we want to update
+          }
         });
         console.log(`[PAPER_TRACK] Updated paper count in DB for guild ${guildId}`);
         
@@ -971,18 +994,12 @@ client.on(Events.MessageCreate, async (message: Message) => {
     
     try {
       // Update the message count in the database
-      const discordRecord = await prisma.discord.findFirst({ 
-        where: { serverId: guildId } 
-      });
-      
       if (discordRecord) {
-        // Fixed update - explicitly specify only the fields we want to update
-        // This prevents issues with reserved keywords like 'new'
         await prisma.discord.update({
           where: { id: discordRecord.id },
           data: { 
             messagesCount: updatedStats.messageCount 
-          } // Comment moved outside: ONLY include the specific fields we want to update
+          }
         });
         console.log(`[MESSAGE_TRACK] Updated message count in DB for guild ${guildId}`);
         
@@ -1026,6 +1043,82 @@ client.on(Events.MessageCreate, async (message: Message) => {
     }
   }
 });
+
+/**
+ * Extract paper URLs from message content
+ */
+function extractPaperUrls(content: string): string[] {
+  const urls: string[] = [];
+  
+  // DOI patterns
+  const doiMatches = content.match(/(?:https?:\/\/)?(?:www\.)?doi\.org\/10\.\d{4,}\/[\w\.\-\/\(\)]+/gi);
+  if (doiMatches) {
+    urls.push(...doiMatches.map(url => url.startsWith('http') ? url : `https://doi.org/${url.replace(/^doi\.org\//, '')}`));
+  }
+  
+  // Scientific domain URLs
+  for (const domain of PAPER_DOMAINS) {
+    const regex = new RegExp(`https?:\\/\\/([\\w-]+\\.)*${domain.replace(/\./g, '\\.')}[\\/\\w\\.-]*`, 'gi');
+    const matches = content.match(regex);
+    if (matches) {
+      urls.push(...matches);
+    }
+  }
+  
+  // Generic URL pattern for potential papers
+  const genericUrls = content.match(/https?:\/\/[^\s]+\.pdf/gi);
+  if (genericUrls) {
+    urls.push(...genericUrls);
+  }
+  
+  return [...new Set(urls)]; // Remove duplicates
+}
+
+/**
+ * Save detected paper to database
+ */
+async function savePaperToDatabase(
+  paperMetadata: PaperMetadata,
+  message: Message,
+  discordRecord: any
+): Promise<void> {
+  try {
+    console.log(`[PAPER_SAVE] Saving paper to database: ${paperMetadata.url}`);
+    
+    // Check if this paper URL was already shared in this Discord server
+    const existingPaper = await prisma.discordPaper.findFirst({
+      where: {
+        url: paperMetadata.url,
+        discordId: discordRecord.id
+      }
+    });
+    
+    if (existingPaper) {
+      console.log(`[PAPER_SAVE] Paper already exists in database: ${paperMetadata.url}`);
+      return;
+    }
+    
+    // Create new paper record
+    await prisma.discordPaper.create({
+      data: {
+        url: paperMetadata.url,
+        title: paperMetadata.title,
+        authors: paperMetadata.authors,
+        doi: paperMetadata.doi,
+        platform: paperMetadata.platform,
+        messageId: message.id,
+        channelId: message.channel.id,
+        userId: message.author.id,
+        username: message.author.tag,
+        discordId: discordRecord.id,
+      }
+    });
+    
+    console.log(`[PAPER_SAVE] Successfully saved paper: ${paperMetadata.url} by ${message.author.tag}`);
+  } catch (error) {
+    console.error(`[PAPER_SAVE] Error saving paper to database:`, error);
+  }
+}
 
 /**
  * Save a Discord member to the database
@@ -2239,3 +2332,62 @@ async function handleAskCommand(interaction: ChatInputCommandInteraction) {
 }
 
 export { client };
+
+/**
+ * Enhanced paper metadata extraction for Discord papers
+ */
+async function extractEnhancedPaperMetadata(url: string, content?: string): Promise<PaperMetadata> {
+  const metadata: PaperMetadata = { url };
+  
+  // Detect platform based on URL
+  if (url.includes('arxiv.org')) {
+    metadata.platform = 'arxiv';
+    // Extract arXiv ID and try to get title
+    const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf)\/(\d{4}\.\d{4,5})/);
+    if (arxivMatch) {
+      metadata.doi = `arXiv:${arxivMatch[1]}`;
+    }
+  } else if (url.includes('nature.com')) {
+    metadata.platform = 'nature';
+  } else if (url.includes('science.org')) {
+    metadata.platform = 'science';
+  } else if (url.includes('cell.com')) {
+    metadata.platform = 'cell';
+  } else if (url.includes('biorxiv.org')) {
+    metadata.platform = 'biorxiv';
+  } else if (url.includes('medrxiv.org')) {
+    metadata.platform = 'medrxiv';
+  } else if (url.includes('pubmed') || url.includes('ncbi.nlm.nih.gov')) {
+    metadata.platform = 'pubmed';
+  } else if (url.includes('researchgate.net')) {
+    metadata.platform = 'researchgate';
+  } else if (url.toLowerCase().endsWith('.pdf')) {
+    metadata.platform = 'pdf';
+  }
+  
+  // Extract DOI from URL or content
+  const doiMatch = (url + ' ' + (content || '')).match(/(?:doi:|doi\.org\/|10\.\d{4,}\/)(10\.\d{4,}\/[\w\.\-\/\(\)]+)/i);
+  if (doiMatch) {
+    metadata.doi = doiMatch[1];
+  }
+  
+  // Try to extract title from content if available
+  if (content) {
+    // Look for common title patterns in Discord messages
+    const titlePatterns = [
+      /"([^"]{10,200})"/,  // Quoted titles
+      /title:\s*([^\n]{10,200})/i,  // "title: ..."
+      /paper:\s*([^\n]{10,200})/i,  // "paper: ..."
+    ];
+    
+    for (const pattern of titlePatterns) {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        metadata.title = match[1].trim();
+        break;
+      }
+    }
+  }
+  
+  return metadata;
+}
