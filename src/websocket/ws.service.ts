@@ -7,6 +7,7 @@ import prisma, {
   ProjectService,
   DiscordService,
   NFTService,
+  BioUserService,
 } from '../services/db.service';
 import TwitterService from '../services/twitter.service';
 import { extractDiscordInfo } from '../utils/helpers';
@@ -15,6 +16,7 @@ import { generateIdeaNFTImage, generateVisionNFTImage } from '../image-generatio
 import { fetchDiscordServerInfo } from '../services/discord.service';
 import config from '../config';
 import { getBotInstallationUrl } from '../utils/discord.utils';
+import { Prisma } from '@prisma/client';
 
 // Map to store active WebSocket connections by user ID
 const activeConnections: Record<string, WebSocket> = {};
@@ -524,21 +526,38 @@ async function handleAuthentication(ws: WebSocket, data: any): Promise<void> {
     // If not found by privyId, try wallet
     if (!project && wallet) {
       project = await ProjectService.getByWallet(wallet);
-
-      if (project && privyId) {
-        // Update existing user with privyId
-        project = await ProjectService.update(project.id, { privyId });
-      }
     }
 
-    // If still not found, create a new user
+    // If still not found, create a new user and project
     if (!project && (wallet || privyId)) {
-      const data: any = {};
-      if (wallet) data.wallet = wallet;
-      if (privyId) data.privyId = privyId;
-      data.level = 1;
+      // Step 1: Create or find the BioUser
+      const userData: {
+        privyId: string;
+        wallet?: string;
+        email?: string;
+        fullName?: string;
+      } = {
+        privyId: privyId || '',
+      };
+      
+      if (wallet) userData.wallet = wallet;
+      
+      const user = await BioUserService.findOrCreate(userData);
 
-      project = await ProjectService.create(data);
+      // Step 2: Create a new project
+      const projectData: Prisma.ProjectCreateInput = {
+        level: 1,
+        members: {
+          create: {
+            bioUser: {
+              connect: { id: user.id }
+            },
+            role: 'founder'
+          }
+        }
+      };
+
+      project = await ProjectService.create(projectData);
     }
 
     if (!project) {
@@ -2624,6 +2643,7 @@ Next steps:
     // Level 6 to Level 7: Blogpost and Twitter thread
     else if (
       currentLevel === 6 &&
+      project.Twitter &&
       (project.Twitter as any).blogpostUrl &&
       (project.Twitter as any).twitterThreadUrl
     ) {
@@ -2675,8 +2695,12 @@ Next steps:
       recordLevelUpSent(project.id, newLevel);
     } else {
       const missingReqs = [];
-      if (!(project.Twitter as any).blogpostUrl) missingReqs.push('visionary blogpost');
-      if (!(project.Twitter as any).twitterThreadUrl) missingReqs.push('Twitter thread');
+      if (!project.Twitter) {
+        missingReqs.push('Twitter connection required');
+      } else {
+        if (!(project.Twitter as any).blogpostUrl) missingReqs.push('visionary blogpost');
+        if (!(project.Twitter as any).twitterThreadUrl) missingReqs.push('Twitter thread');
+      }
       console.log(
         `Project ${project.id} doesn't meet level 7 requirements: ${missingReqs.join(', ')} not verified`
       );

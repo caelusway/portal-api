@@ -1,5 +1,6 @@
 import express from 'express';
 import prisma from '../services/db.service';
+import { error } from 'node:console';
 
 const router = express.Router();
 
@@ -146,6 +147,40 @@ router.get('/wallet/:wallet', async (req: any, res: any) => {
     return res.json(user);
   } catch (error) {
     console.error('Error fetching BioUser by wallet:', error);
+    return res.status(500).json({
+      error: 'Failed to fetch BioUser',
+    });
+  }
+});
+
+/**
+ * GET /api/users/email/:email
+ * Get a BioUser by email address
+ */
+router.get('/email/:email', async (req: any, res: any) => {
+  try {
+    const { email } = req.params;
+
+    const user = await prisma.bioUser.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          include: {
+            project: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'BioUser not found',
+      });
+    }
+
+    return res.json(user);
+  } catch (error) {
+    console.error('Error fetching BioUser by email:', error);
     return res.status(500).json({
       error: 'Failed to fetch BioUser',
     });

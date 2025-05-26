@@ -46,7 +46,7 @@ async function main() {
     // Count the number of unnamed projects
     const count = await prisma.project.count({
       where: {
-        projectName: 'Newest tester'
+        projectName: 'Project Name'
       }
     });
     
@@ -58,7 +58,7 @@ async function main() {
     // First get basic project info
     const basicProjects = await prisma.project.findMany({
       where: {
-        projectName: 'Newest tester'
+        projectName: 'Project Name'
       },
       select: {
         id: true,

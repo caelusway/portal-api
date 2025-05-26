@@ -1,6 +1,7 @@
 import express from 'express';
 import prisma, { ProjectService, ProjectMemberService, BioUserService, ProjectInviteService } from '../services/db.service';
 import { EmailService } from '../services/email.service';
+import { syncProjectToSheets } from '../services/sheets-sync.service';
 
 const router = express.Router();
 
@@ -185,6 +186,15 @@ router.post('/privy/:privyId', async (req: any, res: any) => {
           },
         },
       });
+    }
+
+    // Sync project to Google Sheets
+    try {
+      await syncProjectToSheets(project.id);
+      console.log(`[PROJECT_SYNC] Successfully synced project ${project.id} to Google Sheets`);
+    } catch (syncError) {
+      console.error(`[PROJECT_SYNC] Failed to sync project ${project.id} to Google Sheets:`, syncError);
+      // Don't fail the API response if sync fails
     }
 
     return res.json(project);
@@ -574,6 +584,15 @@ router.post('/', async (req: any, res: any) => {
           },
         },
       });
+    }
+
+    // Sync project to Google Sheets
+    try {
+      await syncProjectToSheets(project.id);
+      console.log(`[PROJECT_SYNC] Successfully synced project ${project.id} to Google Sheets`);
+    } catch (syncError) {
+      console.error(`[PROJECT_SYNC] Failed to sync project ${project.id} to Google Sheets:`, syncError);
+      // Don't fail the API response if sync fails
     }
 
     return res.status(existingProject ? 200 : 201).json(project);

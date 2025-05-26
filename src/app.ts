@@ -3,6 +3,7 @@ import http from 'http';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import path from 'path';
+import rateLimit from 'express-rate-limit';
 import apiRoutes from './routes';
 import config from './config';
 import { initWebSocketServer } from './websocket/ws.service';
@@ -13,9 +14,22 @@ import { validateApiKey } from './middleware/apiKey.middleware';
 // Create express app
 const app = express();
 
-
 // Create HTTP server
 const server = http.createServer(app);
+
+// Configure rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: config.isProduction ? 100 : 1000, // Stricter limits in production
+  message: {
+    error: 'Too many requests from this IP, please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip rate limiting for health checks
+  skip: (req) => req.path === '/api/health',
+});
 
 // Set up middleware
 app.use(cors({
@@ -30,6 +44,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(bodyParser.json());
+
+// Apply rate limiting to all routes
+app.use(limiter);
 
 // Initialize WebSocket server
 const wss = initWebSocketServer(server);

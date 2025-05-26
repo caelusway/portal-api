@@ -44,7 +44,7 @@ const pool = new Pool({
 /**
  * Get Google OAuth2 access token using service account credentials
  */
-async function getGoogleAccessToken(): Promise<string> {
+export async function getGoogleAccessToken(): Promise<string> {
   if (!SERVICE_ACCOUNT_JSON_STRING) {
     throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable');
   }
@@ -672,9 +672,12 @@ export async function syncProjectToSheets(projectId: string): Promise<string> {
           console.log(`[SHEETS_SYNC] Created headers row in sheet using expected column structure`);
         }
         
-        // More explicit URL to specify exactly where data should be inserted
+        // NEW: Use the correct endpoint for appending rows (/:spreadsheetId/values/:range:append)
         const lastColumnLetter = String.fromCharCode('A'.charCodeAt(0) + EXPECTED_COLUMN_STRUCTURE.length - 1);
-        const appendUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A:${lastColumnLetter}?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+        
+        // NEW: Use the correct endpoint for appending rows (/:spreadsheetId/values/:range:append)
+        const appendUrl = `${GOOGLE_SHEETS_API_ENDPOINT}/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:${lastColumnLetter}1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+        
         console.log(`[SHEETS_SYNC] Using append URL: ${appendUrl} with rowData length ${rowData.length}`);
         
         // Detailed logging of final row data

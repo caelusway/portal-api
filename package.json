@@ -39,6 +39,7 @@
     "dkg.js": "^8.0.12",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
     "form-data": "^4.0.1",
     "google-auth-library": "^8.9.0",
     "langchain": "^0.0.203",

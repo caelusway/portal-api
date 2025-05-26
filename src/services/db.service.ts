@@ -168,13 +168,13 @@ export const ProjectService = {
     });
   },
 
-  create: async (data: any) => {
+  create: async (data: Prisma.ProjectCreateInput) => {
     return prisma.project.create({
       data,
     });
   },
 
-  update: async (id: string, data: any) => {
+  update: async (id: string, data: Prisma.ProjectUpdateInput) => {
     return prisma.project.update({
       where: { id },
       data,
