@@ -20,7 +20,7 @@ const server = http.createServer(app);
 // Configure rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: config.isProduction ? 100 : 1000, // Stricter limits in production
+  max: config.isProduction ? 800 : 1000, // Stricter limits in production
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'
