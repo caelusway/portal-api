@@ -101,9 +101,10 @@ export async function sendLevelUpEmail(userEmail: string, level: number): Promis
 
 /**
  * Send an email to the Bio team when a user reaches the sandbox level
- * @param project The project data
+ * @param project The project data with members included
+ * @param recipientEmail Optional specific recipient email (for script usage)
  */
-export async function sendSandboxEmail(project: any): Promise<void> {
+export async function sendSandboxEmail(project: any, recipientEmail?: string): Promise<void> {
   if (!project) {
     console.warn('Cannot send sandbox email: No project data provided');
     return;
@@ -112,8 +113,13 @@ export async function sendSandboxEmail(project: any): Promise<void> {
   try {
     const subject = `🎉 New Sandbox User: ${project.projectName || 'Unknown Project'}`;
 
+    // Get user details from the project members relationship
+    const userEmail = project.members?.[0]?.bioUser?.email || 'Not specified';
+    const userFullName = project.members?.[0]?.bioUser?.fullName || 'Not specified';
+    const userWallet = project.members?.[0]?.bioUser?.wallet || 'Not specified';
+
     // Plain text version
-    const message = `New Sandbox User: ${project.projectName || 'Unknown Project'}\n\nA new user has reached the sandbox level (Level 4) in BioDAO!\n\nProject Details:\n- Project Name: ${project.projectName || 'Not specified'}\n- Project Description: ${project.projectDescription || 'Not specified'}\n- Vision: ${project.projectVision || 'Not specified'}\n- Scientific References: ${project.scientificReferences || 'Not specified'}\n- Credential Links: ${project.credentialLinks || 'Not specified'}\n- Team Members: ${project.teamMembers || 'Not specified'}\n- Motivation: ${project.motivation || 'Not specified'}\n- Progress: ${project.progress || 'Not specified'}\n- Full Name: ${project.fullName || 'Not specified'}\n- Email: ${project.email || 'Not specified'}\n- Wallet: ${project.wallet || 'Not specified'}\n- Referral Code: ${project.referralCode || 'Not specified'}\n- Referred By: ${project.referredById || 'Not specified'}\n- Project ID: ${project.id || 'Not specified'}\n\nCommunity Stats:\n- Discord Members: ${project.Discord?.memberCount || 0}\n- Papers Shared: ${project.Discord?.papersShared || 0}\n- Messages Count: ${project.Discord?.messagesCount || 0}\n- Discord Server Name: ${project.Discord?.serverName || 'Not specified'}\n- Discord Server ID: ${project.Discord?.serverId || 'Not specified'}\n- Discord Verified: ${project.Discord?.verified ? 'Yes' : 'No'}\n- Discord Bot Added: ${project.Discord?.botAdded ? 'Yes' : 'No'}\n\nDiscord Invite Link: ${project.Discord?.inviteLink || 'Not provided'}\n\nPlease reach out to this user to discuss next steps and provide sandbox access.`;
+    const message = `New Sandbox User: ${project.projectName || 'Unknown Project'}\n\nA new user has reached the sandbox level (Level 4) in BioDAO!\n\nProject Details:\n- Project Name: ${project.projectName || 'Not specified'}\n- Project Description: ${project.projectDescription || 'Not specified'}\n- Vision: ${project.projectVision || 'Not specified'}\n- Scientific References: ${project.scientificReferences || 'Not specified'}\n- Credential Links: ${project.credentialLinks || 'Not specified'}\n- Team Members: ${project.teamMembers || 'Not specified'}\n- Motivation: ${project.motivation || 'Not specified'}\n- Progress: ${project.progress || 'Not specified'}\n- Full Name: ${userFullName}\n- Email: ${userEmail}\n- Wallet: ${userWallet}\n- Referral Code: ${project.referralCode || 'Not specified'}\n- Referred By: ${project.referredById || 'Not specified'}\n- Project ID: ${project.id || 'Not specified'}\n\nCommunity Stats:\n- Discord Members: ${project.Discord?.memberCount || 0}\n- Papers Shared: ${project.Discord?.papersShared || 0}\n- Messages Count: ${project.Discord?.messagesCount || 0}\n- Discord Server Name: ${project.Discord?.serverName || 'Not specified'}\n- Discord Server ID: ${project.Discord?.serverId || 'Not specified'}\n- Discord Verified: ${project.Discord?.verified ? 'Yes' : 'No'}\n- Discord Bot Added: ${project.Discord?.botAdded ? 'Yes' : 'No'}\n\nDiscord Invite Link: ${project.Discord?.inviteLink || 'Not provided'}\n\nPlease reach out to this user to discuss next steps and provide sandbox access.`;
 
     // HTML version
     const html = `
@@ -129,9 +135,9 @@ export async function sendSandboxEmail(project: any): Promise<void> {
         <li><strong>Team Members:</strong> ${project.teamMembers || 'Not specified'}</li>
         <li><strong>Motivation:</strong> ${project.motivation || 'Not specified'}</li>
         <li><strong>Progress:</strong> ${project.progress || 'Not specified'}</li>
-        <li><strong>Full Name:</strong> ${project.fullName || 'Not specified'}</li>
-        <li><strong>Email:</strong> ${project.email || 'Not specified'}</li>
-        <li><strong>Wallet:</strong> ${project.wallet || 'Not specified'}</li>
+        <li><strong>Full Name:</strong> ${userFullName}</li>
+        <li><strong>Email:</strong> ${userEmail}</li>
+        <li><strong>Wallet:</strong> ${userWallet}</li>
         <li><strong>Referral Code:</strong> ${project.referralCode || 'Not specified'}</li>
         <li><strong>Referred By:</strong> ${project.referredById || 'Not specified'}</li>
         <li><strong>Project ID:</strong> ${project.id || 'Not specified'}</li>
@@ -151,22 +157,36 @@ export async function sendSandboxEmail(project: any): Promise<void> {
       <p>Please reach out to this user to discuss next steps and provide sandbox access.</p>
     `;
 
-    const data = await Promise.all(
-      SANDBOX_NOTIFICATION_EMAILS.map(email =>
-        mg.messages.create(MAILGUN_DOMAIN, {
-          from: FROM_EMAIL,
-          to: email,
-          subject: subject,
-          text: message,
-          html: html,
-        })
-      )
-    );
+    // If a specific recipient email is provided (for script usage), send only to that email
+    if (recipientEmail) {
+      const data = await mg.messages.create(MAILGUN_DOMAIN, {
+        from: FROM_EMAIL,
+        to: recipientEmail,
+        subject: subject,
+        text: message,
+        html: html,
+      });
 
-    console.log(
-      `Sandbox notification email sent to ${SANDBOX_NOTIFICATION_EMAILS.join(', ')}. Response:`,
-      data
-    );
+      console.log(`Sandbox notification email sent to ${recipientEmail}. Response:`, data);
+    } else {
+      // Send to all configured sandbox notification emails
+      const data = await Promise.all(
+        SANDBOX_NOTIFICATION_EMAILS.map(email =>
+          mg.messages.create(MAILGUN_DOMAIN, {
+            from: FROM_EMAIL,
+            to: email,
+            subject: subject,
+            text: message,
+            html: html,
+          })
+        )
+      );
+
+      console.log(
+        `Sandbox notification email sent to ${SANDBOX_NOTIFICATION_EMAILS.join(', ')}. Response:`,
+        data
+      );
+    }
   } catch (error) {
     console.error('Error sending sandbox notification email:', error);
   }

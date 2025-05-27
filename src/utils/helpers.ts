@@ -130,9 +130,9 @@ export function getNextLevelRequirements(currentLevel: number): string[] {
       ];
     case 3:
       return [
-        'Grow your Discord to at least 5 members',
-        'Share at least 5 research papers',
-        'Reach 50 messages in your server',
+        'Grow your Discord to at least 10 members',
+        'Share at least 25 research papers',
+        'Reach 100 messages in your server',
       ];
     case 4:
       return ["You've reached the highest level! Sandbox access is available now."];
@@ -202,16 +202,16 @@ A Discord server will be the hub for your research community, allowing members t
     const papersShared = discord.papersShared || 0;
     const messagesCount = discord.messagesCount || 0;
 
-    const memberStatus = memberCount >= 5 ? '✅' : '⬜';
-    const papersStatus = papersShared >= 5 ? '✅' : '⬜';
-    const messagesStatus = messagesCount >= 50 ? '✅' : '⬜';
+    const memberStatus = memberCount >= 10 ? '✅' : '⬜';
+    const papersStatus = papersShared >= 25 ? '✅' : '⬜';
+    const messagesStatus = messagesCount >= 100 ? '✅' : '⬜';
 
     return `## Level 3: Community Growth
 To reach Level 4 and gain sandbox access, grow your community through:
 
-${memberStatus} 5+ Discord members (currently: ${memberCount}/5)
-${papersStatus} 5+ scientific papers shared (currently: ${papersShared}/5)
-${messagesStatus} 50+ quality messages (currently: ${messagesCount}/50)
+${memberStatus} 10+ Discord members (currently: ${memberCount}/10)
+${papersStatus} 25+ scientific papers shared (currently: ${papersShared}/25)
+${messagesStatus} 100+ quality messages (currently: ${messagesCount}/100)
 
 Your community's activity and knowledge sharing are key metrics for progression to sandbox access.`;
   }

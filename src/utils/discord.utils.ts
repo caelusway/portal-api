@@ -42,13 +42,13 @@ export async function checkDiscordLevelProgress(project: any): Promise<boolean> 
     // Level 3 to 4: Check Discord metrics (members, messages, papers)
     else if (
       currentLevel === 3 &&
-      discord.memberCount >= 5 &&
-      discord.papersShared >= 5 &&
-      discord.messagesCount >= 50
+      discord.memberCount >= 10 &&
+      discord.papersShared >= 25 &&
+      discord.messagesCount >= 100
     ) {
       console.log(
         `[Level Check] Project ${project.id} meets level 4 requirements: ` +
-          `${discord.memberCount}/5 members, ${discord.papersShared}/5 papers, ${discord.messagesCount}/50 messages`
+          `${discord.memberCount}/10 members, ${discord.papersShared}/25 papers, ${discord.messagesCount}/100 messages`
       );
       leveledUp = true;
       newLevel = 4;
@@ -67,10 +67,10 @@ export async function checkDiscordLevelProgress(project: any): Promise<boolean> 
       });
 
       // If the user has an email, send a level-up email
-      if (project.email) {
+      if (project.members && project.members.length > 0 && project.members[0].bioUser.email) {
         try {
           // This would typically call an email service
-          console.log(`Level-up email would be sent to ${project.email} for level ${newLevel}`);
+          console.log(`Level-up email would be sent to ${project.members[0].bioUser.email} for level ${newLevel}`);
         } catch (emailError) {
           console.error('Error sending level-up email:', emailError);
         }
@@ -204,9 +204,9 @@ export function getNextLevelRequirements(currentLevel: number): string[] {
       ];
     case 3:
       return [
-        "Have at least 5 Discord members",
-        "Share at least 5 scientific papers in Discord",
-        "Have at least 50 quality messages in Discord",
+        "Have at least 10 Discord members",
+        "Share at least 25 scientific papers in Discord",
+        "Have at least 100 quality messages in Discord",
       ];
     case 4:
       return [

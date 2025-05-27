@@ -1230,14 +1230,14 @@ function generateNextLevelRequirementsMessage(currentLevel: number, project: any
       const messages = project.Discord?.messagesCount || 0;
       return [
         `**You're doing great! Let's get you to Level 4:**\n`,
-        `**1. Grow to 5+ Members** *(you need ${Math.max(0, 5 - members)} more)*:\n`,
+        `**1. Grow to 10+ Members** *(you need ${Math.max(0, 10 - members)} more)*:\n`,
         `- Share your invite with researchers`,
         `- Host community events`,
         `- Invite participants from aligned communities\n`,
-        `**2. Share 5+ Scientific Papers** *(you need ${Math.max(0, 5 - papers)} more)*:\n`,
+        `**2. Share 25+ Scientific Papers** *(you need ${Math.max(0, 25 - papers)} more)*:\n`,
         `- Share PDFs or links from PubMed, bioRxiv, etc.`,
         `- The bot detects papers shared in your server\n`,
-        `**3. Reach 50+ Quality Messages** *(you need ${Math.max(0, 50 - messages)} more)*:\n`,
+        `**3. Reach 100+ Quality Messages** *(you need ${Math.max(0, 100 - messages)} more)*:\n`,
         `- Encourage rich discussion on research topics`,
         `- Ask thoughtful, open-ended questions`,
         `- The bot tracks and filters quality messages\n`,
@@ -2405,9 +2405,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
       currentLevel === 3 &&
       discordStats &&
       discordStats.verified &&
-      discordStats.memberCount >= 5 &&
-      discordStats.papersShared >= 5 &&
-      discordStats.messagesCount >= 50
+      discordStats.memberCount >= 10 &&
+      discordStats.papersShared >= 25 &&
+      discordStats.messagesCount >= 100
     ) {
       // Define the new level
       const newLevel = 4;
@@ -2792,9 +2792,9 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
         if (
           discordStats &&
           discordStats.memberCount &&
-          discordStats.memberCount >= 5 &&
-          discordStats.papersShared >= 5 &&
-          discordStats.messagesCount >= 50
+          discordStats.memberCount >= 10 &&
+          discordStats.papersShared >= 25 &&
+          discordStats.messagesCount >= 100
         ) {
           // Check if we've recently sent this level-up notification
           if (wasLevelUpRecentlySent(project.id, 4)) {
@@ -2809,13 +2809,9 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           
           // Send sandbox email when reaching level 4
           try {
-            // Get user email for notification
-            if (project.email) {
-              await sendSandboxEmail(project);
-              console.log(`Sandbox email sent to ${project.email} for project ${project.id}`);
-            } else {
-              console.warn(`No email found for project ${project.id}, sandbox email not sent`);
-            }
+            // Send sandbox notification to Bio team members
+            await sendSandboxEmail(project);
+            console.log(`Sandbox email sent to Bio team for project ${project.id}`);
           } catch (emailError) {
             console.error(`Error sending sandbox email for project ${project.id}:`, emailError);
           }
@@ -2824,12 +2820,12 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
           if (!discordStats) {
             missingReqs.push('Discord stats not available');
           } else {
-            if (discordStats.memberCount && discordStats.memberCount < 5)
-              missingReqs.push(`Need more members (${discordStats.memberCount}/5)`);
-            if (discordStats.papersShared && discordStats.papersShared < 5)
-              missingReqs.push(`Need more papers shared (${discordStats.papersShared}/5)`);
-            if (discordStats.messagesCount && discordStats.messagesCount < 50)
-              missingReqs.push(`Need more messages (${discordStats.messagesCount}/50)`);
+            if (discordStats.memberCount && discordStats.memberCount < 10)
+              missingReqs.push(`Need more members (${discordStats.memberCount}/10)`);
+            if (discordStats.papersShared && discordStats.papersShared < 25)
+              missingReqs.push(`Need more papers shared (${discordStats.papersShared}/25)`);
+            if (discordStats.messagesCount && discordStats.messagesCount < 100)
+              missingReqs.push(`Need more messages (${discordStats.messagesCount}/100)`);
           }
           console.log(
             `Project ${project.id} doesn't meet level 4 requirements: ${missingReqs.join(', ')}`
@@ -3006,9 +3002,9 @@ async function checkAndPerformLevelUp(project: any, ws: WebSocket): Promise<void
 
       // Send level up email notification
       try {
-        if (project.email) {
-          await sendLevelUpEmail(project.email, newLevel);
-          console.log(`Level up email sent to ${project.email} for level ${newLevel}`);
+        if (project.members && project.members.length > 0 && project.members[0].bioUser.email) {
+          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
+          console.log(`Level up email sent to ${project.members[0].bioUser.email} for level ${newLevel}`);
         }
       } catch (emailError) {
         console.error(`Error sending level up email for project ${project.id}:`, emailError);
@@ -3040,8 +3036,33 @@ async function sendLevelUpEmail(userEmail: string, level: number) {
 async function sendSandboxEmail(project: any) {
   const EmailService = require('../services/email.service');
   try {
-    await EmailService.sendSandboxEmail(project);
-    console.log(`Sandbox email sent for project ${project.id}`);
+    // Get the sandbox notification emails from environment variable
+    const sandboxEmails = process.env.SANDBOX_NOTIFICATION_EMAIL;
+    
+    if (!sandboxEmails) {
+      console.warn('SANDBOX_NOTIFICATION_EMAIL environment variable not set, skipping sandbox email');
+      return;
+    }
+    
+    // Parse the comma-separated email list
+    const emailList = sandboxEmails.split(',').map(email => email.trim()).filter(email => email);
+    
+    if (emailList.length === 0) {
+      console.warn('No valid emails found in SANDBOX_NOTIFICATION_EMAIL environment variable');
+      return;
+    }
+    
+    // Send sandbox notification to each team member
+    for (const email of emailList) {
+      try {
+        await EmailService.sendSandboxEmail(project, email);
+        console.log(`Sandbox email sent to ${email} for project ${project.id}`);
+      } catch (emailError) {
+        console.error(`Error sending sandbox email to ${email} for project ${project.id}:`, emailError);
+      }
+    }
+    
+    console.log(`Sandbox email notifications sent to ${emailList.length} team members for project ${project.id}`);
   } catch (error) {
     console.error(`Error sending sandbox email for project ${project.id}:`, error);
     throw error;
@@ -3413,11 +3434,11 @@ I'll help you track these metrics and provide strategies to achieve them.`;
     recordLevelUpSent(project.id, newLevel);
 
     // Send level up email
-    if (project.email) {
+    if (project.members && project.members.length > 0 && project.members[0].bioUser.email) {
       try {
-        await sendLevelUpEmail(project.email, newLevel);
+        await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
       } catch (error) {
-        console.error(`Error sending level up email to ${project.email}:`, error);
+        console.error(`Error sending level up email to ${project.members[0].bioUser.email}:`, error);
       }
     }
   }
@@ -3426,9 +3447,9 @@ I'll help you track these metrics and provide strategies to achieve them.`;
   if (
     project.level === 3 &&
     project.Discord &&
-    project.Discord.memberCount >= 5 &&
-    project.Discord.papersShared >= 5 &&
-    project.Discord.messagesCount >= 50
+    project.Discord.memberCount >= 10 &&
+    project.Discord.papersShared >= 25 &&
+    project.Discord.messagesCount >= 100
   ) {
     const newLevel = 4;
     
@@ -3494,15 +3515,22 @@ The Bio team will contact you via email shortly to schedule a call to discuss yo
     recordLevelUpSent(project.id, newLevel);
 
     // Send email notifications
-    if (project.email) {
+    if (project.members && project.members.length > 0 && project.members[0].bioUser.email) {
       try {
         // Send level up email
-        await sendLevelUpEmail(project.email, newLevel);
+        await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
         
         // Send sandbox email for final level
         await sendSandboxEmail(project);
       } catch (error) {
-        console.error(`Error sending emails to ${project.email}:`, error);
+        console.error(`Error sending emails to ${project.members[0].bioUser.email}:`, error);
+      }
+    } else if (process.env.SANDBOX_NOTIFICATION_EMAIL) {
+      // If no user email but sandbox notifications are configured, still send sandbox email
+      try {
+        await sendSandboxEmail(project);
+      } catch (error) {
+        console.error(`Error sending sandbox email for project ${project.id}:`, error);
       }
     }
   }
