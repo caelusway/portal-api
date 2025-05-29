@@ -29,24 +29,18 @@ RUN apt-get update && \
         openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
+# Copy package files and prisma schema
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install ALL dependencies first (including dev dependencies for build)
-RUN npm ci
-
-# Generate Prisma client
-RUN npx prisma generate
-
-# Build the application
-RUN npm run build
-
-# Remove dev dependencies and reinstall only production dependencies
+# Install dependencies (postinstall will run prisma generate automatically)
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy application code (after build to avoid rebuilding when code changes)
+# Copy source code
 COPY . .
+
+# Build the application (after copying source code)
+RUN npm run build
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser && \
