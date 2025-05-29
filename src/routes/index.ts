@@ -9,6 +9,7 @@ import inviteRoutes from './invite.routes';
 import userRoutes from './user.routes';
 import twitterRoutes from './twitter.routes';
 import coachingRoutes from './coaching.routes';
+import poiRoutes from './poi.routes';
 
 const router = express.Router();
 
@@ -28,5 +29,6 @@ router.use('/invites', inviteRoutes);
 router.use('/users', userRoutes);
 router.use('/twitter', twitterRoutes);
 router.use('/coaching', coachingRoutes);
+router.use('/v1', poiRoutes); // POI API v1 routes
 
 export default router;

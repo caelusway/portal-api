@@ -718,6 +718,12 @@ async function initializeGuildStats(guild: Guild): Promise<void> {
   qualityScoreByGuild[guild.id] = dbQuality;
   
   console.log(`[DEBUG] initializeGuildStats COMPLETE for guild: ${guild.name} (${guild.id})`);
+
+  // **NEW: Automatically process existing members for welcome DMs**
+  // Add a small delay to avoid overwhelming the system on startup
+  setTimeout(() => {
+    processExistingMembersForGuild(guild);
+  }, 5000); // 5 second delay after guild initialization
 }
 
 // Track papers shared by looking for links/attachments
@@ -1549,59 +1555,166 @@ async function processDMResponse(message: Message): Promise<void> {
     // Parse and store credentials based on type
     const lower = content.toLowerCase();
     let found = false;
+    
+    console.log(`[PROCESS_DM_STEP2] User ${userId} provided: "${content}"`);
+    
+    // Enhanced LinkedIn detection
     if (content.match(/linkedin\.com\//i)) {
-      profileData.credentials.linkedin = content.match(/https?:\/\/(www\.)?linkedin\.com\/in\/[\w\-]+/i)?.[0] || content;
+      const linkedinUrl = content.match(/https?:\/\/(www\.)?linkedin\.com\/in\/[\w\-]+/i)?.[0] || content;
+      profileData.credentials.linkedin = linkedinUrl;
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected LinkedIn: ${linkedinUrl}`);
     }
+    
+    // Enhanced GitHub detection
     if (content.match(/github\.com\//i)) {
-      profileData.credentials.github = content.match(/https?:\/\/(www\.)?github\.com\/[\w\-]+/i)?.[0] || content;
+      const githubUrl = content.match(/https?:\/\/(www\.)?github\.com\/[\w\-]+/i)?.[0] || content;
+      profileData.credentials.github = githubUrl;
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected GitHub: ${githubUrl}`);
     }
+    
+    // Enhanced Google Scholar detection
     if (content.match(/scholar\.google\.com/i)) {
-      profileData.credentials.scholar = content.match(/https?:\/\/(www\.)?scholar\.google\.com\/[\w\-\/?=]+/i)?.[0] || content;
+      const scholarUrl = content.match(/https?:\/\/(www\.)?scholar\.google\.com\/[\w\-\/?=&]+/i)?.[0] || content;
+      profileData.credentials.scholar = scholarUrl;
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected Google Scholar: ${scholarUrl}`);
     }
+    
+    // Enhanced ORCID detection
     if (content.match(/orcid\.org/i)) {
-      profileData.credentials.orcid = content.match(/https?:\/\/(www\.)?orcid\.org\/[\d\-]+/i)?.[0] || content;
+      const orcidUrl = content.match(/https?:\/\/(www\.)?orcid\.org\/[\d\-X]+/i)?.[0] || content;
+      profileData.credentials.orcid = orcidUrl;
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected ORCID: ${orcidUrl}`);
     }
-    if (content.match(/twitter\.com\//i)) {
-      profileData.credentials.twitter = content.match(/https?:\/\/(www\.)?twitter\.com\/[\w\-]+/i)?.[0] || content;
+    
+    // Enhanced Twitter detection (including x.com)
+    if (content.match(/(twitter\.com|x\.com)\//i)) {
+      const twitterUrl = content.match(/https?:\/\/(www\.)?(twitter\.com|x\.com)\/[\w\-]+/i)?.[0] || content;
+      profileData.credentials.twitter = twitterUrl;
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected Twitter/X: ${twitterUrl}`);
     }
-    // Accept any other link as 'other'
+    
+    // ResearchGate detection
+    if (content.match(/researchgate\.net/i)) {
+      const researchgateUrl = content.match(/https?:\/\/(www\.)?researchgate\.net\/[\w\-\/\.]+/i)?.[0] || content;
+      // Add to 'other' field, appending if it already exists
+      if (profileData.credentials.other) {
+        profileData.credentials.other += '; ' + researchgateUrl;
+      } else {
+        profileData.credentials.other = researchgateUrl;
+      }
+      found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected ResearchGate: ${researchgateUrl}`);
+    }
+    
+    // Scientific paper URLs detection
+    const scientificDomains = [
+      'arxiv.org', 'biorxiv.org', 'medrxiv.org', 'chemrxiv.org', 'psyarxiv.com',
+      'nature.com', 'science.org', 'cell.com', 'plos.org', 'frontiersin.org',
+      'springer.com', 'wiley.com', 'sciencedirect.com', 'pubmed.ncbi.nlm.nih.gov',
+      'ncbi.nlm.nih.gov', 'doi.org', 'pnas.org', 'elifesciences.org', 'mdpi.com'
+    ];
+    
+    for (const domain of scientificDomains) {
+      if (content.toLowerCase().includes(domain)) {
+        const urlMatch = content.match(/https?:\/\/[^\s]+/i);
+        if (urlMatch) {
+          // Add to 'other' field, appending if it already exists
+          if (profileData.credentials.other) {
+            profileData.credentials.other += '; ' + urlMatch[0];
+          } else {
+            profileData.credentials.other = urlMatch[0];
+          }
+          found = true;
+          console.log(`[PROCESS_DM_STEP2] Detected scientific URL (${domain}): ${urlMatch[0]}`);
+          break;
+        }
+      }
+    }
+    
+    // Accept any other link as 'other' if not already found
     if (!found && content.match(/https?:\/\//i)) {
-      profileData.credentials.other = content.match(/https?:\/\/[\w\-\.\/\?=]+/i)?.[0] || content;
+      const genericUrl = content.match(/https?:\/\/[^\s]+/i)?.[0] || content;
+      // Add to 'other' field, appending if it already exists
+      if (profileData.credentials.other) {
+        profileData.credentials.other += '; ' + genericUrl;
+      } else {
+        profileData.credentials.other = genericUrl;
+      }
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Detected generic URL: ${genericUrl}`);
     }
-    // Accept freeform description for 'other'
-    if (!found && profileData.contributorType === 'other') {
-      profileData.description = content;
+    
+    // Accept freeform description for web3_enthusiast or if no URL detected
+    if (!found && (profileData.contributorType === 'web3_enthusiast' || profileData.contributorType === 'other')) {
+      if (!profileData.description) {
+        profileData.description = content;
+      } else {
+        profileData.description += '; ' + content;
+      }
       found = true;
+      console.log(`[PROCESS_DM_STEP2] Added to description: ${content}`);
     }
+    
+    // Handle "skip" command
+    if (content.toLowerCase() === 'skip') {
+      found = true;
+      console.log(`[PROCESS_DM_STEP2] User ${userId} skipped credential entry`);
+    }
+    
     // If at least one credential or description, move to next step
     if (found) {
       profileData.onboardingStep = 3;
+      userProfileCollections.set(userId, profileData);
+      
+      // Save progress to database immediately
+      try {
+        await saveUserProfileToDatabase(profileData);
+        console.log(`[PROCESS_DM_STEP2] Saved credentials to database for user ${userId}`);
+      } catch (saveError) {
+        console.error(`[PROCESS_DM_STEP2] Error saving credentials to database:`, saveError);
+      }
+      
       await message.reply(`✅ Got it! Your information has been added.\n\nType **'done'** if you have nothing more to add, or provide another link/credential.`);
     } else {
-      await message.reply(`Hmm, I didn't recognize that as a common link format (like LinkedIn, GitHub, Scholar, ORCID, Twitter) or a description for your Web3 interests. \n\nPlease try again with a valid URL, or type **'done'** to finish with the info you've provided so far.`);
+      await message.reply(`Hmm, I didn't recognize that as a common link format (like LinkedIn, GitHub, Scholar, ORCID, Twitter) or a description for your interests. \n\nPlease try again with a valid URL, or type **'skip'** to move on, or type **'done'** to finish with the info you've provided so far.`);
     }
-    userProfileCollections.set(userId, profileData);
     return;
   }
   // --- Step 3: Confirmation ---
   if (profileData.onboardingStep === 3) {
     if (content.toLowerCase() === 'done') {
       profileData.isComplete = true;
-      await message.reply(`🎉 **Onboarding Complete!** Thank you for sharing your information.\n\nOur team will review your profile. You can update your info anytime by DMing me again with new links or details.\n\nWelcome to the community!`);
-      // Save to DB and notify founders (reuse existing logic, adapt as needed)
-      await saveUserProfileToDatabase(profileData);
-      await notifyFoundersAboutNewMemberProfile(profileData);
       userProfileCollections.set(userId, profileData);
+      
+      // Final save to database with complete profile
+      try {
+        await saveUserProfileToDatabase(profileData);
+        console.log(`[PROCESS_DM_STEP3] Final save completed for user ${userId}`);
+      } catch (saveError) {
+        console.error(`[PROCESS_DM_STEP3] Error in final save:`, saveError);
+      }
+      
+      await message.reply(`🎉 **Onboarding Complete!** Thank you for sharing your information.\n\nOur team will review your profile. You can update your info anytime by DMing me again with new links or details.\n\nWelcome to the community!`);
+      
+      // Notify founders about the completed profile
+      try {
+        await notifyFoundersAboutNewMemberProfile(profileData);
+        console.log(`[PROCESS_DM_STEP3] Notified founders about completed profile for user ${userId}`);
+      } catch (notifyError) {
+        console.error(`[PROCESS_DM_STEP3] Error notifying founders:`, notifyError);
+      }
+      
       return;
     } else {
-      // Allow adding more credentials
+      // Allow adding more credentials - go back to step 2 processing
+      console.log(`[PROCESS_DM_STEP3] User ${userId} adding additional credential: "${content}"`);
       profileData.onboardingStep = 2;
+      userProfileCollections.set(userId, profileData);
       await processDMResponse(message); // Recurse to handle as step 2
       return;
     }
@@ -1615,6 +1728,7 @@ async function processDMResponse(message: Message): Promise<void> {
 async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<void> {
   try {
     console.log(`[PROFILE_SAVE] Saving profile data for user ${profileData.userId}`);
+    console.log(`[PROFILE_SAVE] Credentials to save:`, JSON.stringify(profileData.credentials, null, 2));
 
     // First check if this Discord record exists
     const discordRecord = await prisma.discord.findFirst({
@@ -1628,31 +1742,160 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
 
     // Check if member already exists in the database
     const existingMember = await prisma.discordMember.findUnique({
-      where: { discordId: profileData.userId }
+      where: { discordId: profileData.userId },
+      include: { scientificProfiles: true }
     });
+
+    let memberRecord;
 
     if (existingMember) {
-      console.log(`[PROFILE_SAVE] Member ${profileData.userId} already exists in database, skipping save`);
-      return;
+      console.log(`[PROFILE_SAVE] Member ${profileData.userId} already exists in database, updating profile`);
+      
+      // Update existing member with new profile data
+      memberRecord = await prisma.discordMember.update({
+        where: { discordId: profileData.userId },
+        data: {
+          linkedinUrl: profileData.credentials?.linkedin || existingMember.linkedinUrl,
+          scientificProfileUrl: profileData.credentials?.scholar || existingMember.scientificProfileUrl,
+          motivationToJoin: profileData.description || existingMember.motivationToJoin,
+          isOnboarded: true,
+          updatedAt: new Date(),
+        }
+      });
+      console.log(`[PROFILE_SAVE] Updated existing member ${profileData.userId}`);
+    } else {
+      // Create new member record
+      console.log(`[PROFILE_SAVE] Creating new member record for ${profileData.userId}`);
+      
+      // Get user info for username and avatar
+      let discordUser;
+      try {
+        discordUser = await client.users.fetch(profileData.userId);
+      } catch (error) {
+        console.error(`[PROFILE_SAVE] Error fetching Discord user ${profileData.userId}:`, error);
+      }
+
+      memberRecord = await prisma.discordMember.create({
+        data: {
+          discordId: profileData.userId,
+          discordUsername: discordUser?.tag || profileData.userId,
+          discordAvatar: discordUser?.displayAvatarURL() || null,
+          discordServerId: profileData.guildId,
+          linkedinUrl: profileData.credentials?.linkedin || null,
+          scientificProfileUrl: profileData.credentials?.scholar || null,
+          motivationToJoin: profileData.description || null,
+          isOnboarded: true,
+          paperContributions: 0,
+          messageCount: 0,
+        }
+      });
+      console.log(`[PROFILE_SAVE] Created new member record with ID ${memberRecord.id}`);
     }
 
-    // Create the new member record
-    const newMember = await prisma.discordMember.create({
-      data: {
-        discordId: profileData.userId,
-        discordUsername: profileData.userId,
-        discordAvatar: null,
-        discordServerId: profileData.guildId,
-        linkedinUrl: profileData.credentials?.linkedin || null,
-        scientificProfileUrl: profileData.credentials?.scholar || null,
-        motivationToJoin: profileData.description || null,
-        isOnboarded: true,
-        paperContributions: 0,
-        messageCount: 0,
+    // Now handle scientific profiles in the separate table
+    const scientificCredentials = [];
+    
+    // Add Google Scholar
+    if (profileData.credentials?.scholar) {
+      scientificCredentials.push({
+        url: profileData.credentials.scholar,
+        platform: 'google_scholar'
+      });
+    }
+    
+    // Add ORCID
+    if (profileData.credentials?.orcid) {
+      scientificCredentials.push({
+        url: profileData.credentials.orcid,
+        platform: 'orcid'
+      });
+    }
+    
+    // Add GitHub (can be scientific for research code)
+    if (profileData.credentials?.github) {
+      scientificCredentials.push({
+        url: profileData.credentials.github,
+        platform: 'github'
+      });
+    }
+    
+    // Add Twitter (for scientific communication)
+    if (profileData.credentials?.twitter) {
+      scientificCredentials.push({
+        url: profileData.credentials.twitter,
+        platform: 'twitter'
+      });
+    }
+    
+    // Add other URLs (research papers, ResearchGate, etc.)
+    if (profileData.credentials?.other) {
+      // Handle multiple URLs in the 'other' field (separated by semicolons or newlines)
+      const otherUrls = profileData.credentials.other.split(/[;\n]/).map(url => url.trim()).filter(url => url.length > 0);
+      
+      for (const url of otherUrls) {
+        // Try to determine platform from URL
+        let platform = 'other';
+        const urlLower = url.toLowerCase();
+        
+        if (urlLower.includes('researchgate.net')) platform = 'researchgate';
+        else if (urlLower.includes('arxiv.org')) platform = 'arxiv';
+        else if (urlLower.includes('biorxiv.org')) platform = 'biorxiv';
+        else if (urlLower.includes('medrxiv.org')) platform = 'medrxiv';
+        else if (urlLower.includes('pubmed') || urlLower.includes('ncbi.nlm.nih.gov')) platform = 'pubmed';
+        else if (urlLower.includes('nature.com')) platform = 'nature';
+        else if (urlLower.includes('science.org')) platform = 'science';
+        else if (urlLower.includes('cell.com')) platform = 'cell';
+        else if (urlLower.includes('plos.org')) platform = 'plos';
+        else if (urlLower.includes('frontiersin.org')) platform = 'frontiers';
+        else if (urlLower.includes('springer.com')) platform = 'springer';
+        else if (urlLower.includes('wiley.com')) platform = 'wiley';
+        else if (urlLower.includes('sciencedirect.com')) platform = 'sciencedirect';
+        else if (urlLower.includes('elifesciences.org')) platform = 'elife';
+        else if (urlLower.includes('mdpi.com')) platform = 'mdpi';
+        else if (urlLower.includes('osf.io')) platform = 'osf';
+        else if (urlLower.includes('core.ac.uk')) platform = 'core';
+        else if (urlLower.includes('paperswithcode.com')) platform = 'paperswithcode';
+        else if (urlLower.includes('jstor.org')) platform = 'jstor';
+        else if (urlLower.includes('pnas.org')) platform = 'pnas';
+        else if (urlLower.includes('doi.org')) platform = 'doi';
+        
+        scientificCredentials.push({
+          url: url,
+          platform: platform
+        });
       }
-    });
+    }
 
-    console.log(`[PROFILE_SAVE] Successfully saved Discord member ${profileData.userId} to database with ID ${newMember.id}`);
+    // Save scientific profiles
+    if (scientificCredentials.length > 0) {
+      console.log(`[PROFILE_SAVE] Saving ${scientificCredentials.length} scientific profiles for member ${memberRecord.id}`);
+      
+      // Remove existing scientific profiles to avoid duplicates
+      if (existingMember?.scientificProfiles && existingMember.scientificProfiles.length > 0) {
+        await prisma.scientificProfile.deleteMany({
+          where: { memberId: memberRecord.id }
+        });
+        console.log(`[PROFILE_SAVE] Removed ${existingMember.scientificProfiles.length} existing scientific profiles`);
+      }
+      
+      // Create new scientific profiles
+      for (const credential of scientificCredentials) {
+        try {
+          await prisma.scientificProfile.create({
+            data: {
+              url: credential.url,
+              platform: credential.platform,
+              memberId: memberRecord.id,
+            }
+          });
+          console.log(`[PROFILE_SAVE] Created scientific profile: ${credential.platform} - ${credential.url}`);
+        } catch (error) {
+          console.error(`[PROFILE_SAVE] Error creating scientific profile for ${credential.platform}:`, error);
+        }
+      }
+    }
+
+    console.log(`[PROFILE_SAVE] Successfully saved complete profile for Discord member ${profileData.userId}`);
   } catch (error) {
     console.error(`[PROFILE_SAVE] Error saving Discord member to database:`, error);
   }
@@ -2449,3 +2692,185 @@ async function extractEnhancedPaperMetadata(url: string, content?: string): Prom
   
   return metadata;
 }
+
+// Add this function after the existing sendWelcomeDMToNewMember function
+async function sendWelcomeDMToExistingMember(member: GuildMember, discordRecord: any, project: any): Promise<boolean> {
+  // Check if user already has a profile or has completed onboarding
+  const existingProfile = userProfileCollections.get(member.user.id);
+  if (existingProfile && existingProfile.isComplete) {
+    console.log(`[EXISTING_WELCOME_DM] User ${member.user.id} already has a profile and has completed onboarding`);
+    return false; // Already completed
+  }
+
+  // Check database for existing profile
+  try {
+    const dbProfile = await prisma.discordMember.findFirst({
+      where: { 
+        discordId: member.user.id,
+        discordServerId: member.guild.id,
+        isOnboarded: true  // Only skip if user has completed onboarding
+      }
+    });
+    if (dbProfile) {
+      return false; // Already completed onboarding in database
+    }
+  } catch (error) {
+    console.log(`[EXISTING_WELCOME_DM] Could not check database for user ${member.user.id}, proceeding with DM`);
+  }
+
+  // Setup collector first
+  setupPersistentResponseCollector(member.user.id, member.guild.id);
+
+  // Set onboarding step to 1
+  let profile = userProfileCollections.get(member.user.id);
+  if (profile) {
+    profile.onboardingStep = 1;
+  } else {
+    userProfileCollections.set(member.user.id, {
+      userId: member.user.id,
+      guildId: member.guild.id,
+      onboardingStep: 1,
+      credentials: {},
+      lastInteraction: new Date(),
+      isComplete: false,
+    });
+  }
+
+  try {
+    const welcomeText = `👋 Hello **${member.user.username}**! We've enhanced our community with a new contributor profiling system for **${project.projectName || member.guild.name}**!\n\n🎯 This helps us:\n• Connect you with relevant opportunities\n• Better understand our community\n• Provide personalized experiences\n\nTo get started, please select your primary area of interest:`;
+
+    const scientistButton = new ButtonBuilder()
+      .setCustomId('onboarding_scientist')
+      .setLabel('Scientist / Researcher')
+      .setStyle(ButtonStyle.Primary);
+
+    const developerButton = new ButtonBuilder()
+      .setCustomId('onboarding_developer')
+      .setLabel('Developer / Engineer')
+      .setStyle(ButtonStyle.Primary);
+
+    const communityButton = new ButtonBuilder()
+      .setCustomId('onboarding_community')
+      .setLabel('Community Builder')
+      .setStyle(ButtonStyle.Primary);
+
+    const web3Button = new ButtonBuilder()
+      .setCustomId('onboarding_web3_enthusiast')
+      .setLabel('Web3 Enthusiast')
+      .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(scientistButton, developerButton, communityButton, web3Button);
+
+    await member.send({ content: welcomeText, components: [row] });
+    console.log(`[EXISTING_WELCOME_DM] Sent welcome DM to existing member ${member.user.tag} (${member.user.id})`);
+    return true;
+
+  } catch (error) {
+    console.error(`[EXISTING_WELCOME_DM] Error sending welcome DM to existing member ${member.user.tag} (${member.user.id}):`, error);
+    return false;
+  }
+}
+
+// Add this function to automatically process existing members
+async function processExistingMembersForGuild(guild: Guild): Promise<void> {
+  console.log(`[AUTO_WELCOME] Processing existing members for guild ${guild.name} (${guild.id})`);
+  
+  try {
+    // Fetch the project data from database
+    const discordRecord = await prisma.discord.findFirst({
+      where: { serverId: guild.id },
+      include: {
+        project: {
+          include: {
+            members: {
+              include: {
+                bioUser: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!discordRecord || !discordRecord.project) {
+      console.log(`[AUTO_WELCOME] No project found for guild ${guild.id}, skipping existing member processing`);
+      return;
+    }
+
+    // Fetch all members
+    await guild.members.fetch();
+    const members = guild.members.cache.filter(member => !member.user.bot);
+    
+    console.log(`[AUTO_WELCOME] Found ${members.size} non-bot members in guild ${guild.name}`);
+
+    // Process members gradually to avoid rate limits
+    let processedCount = 0;
+    let successCount = 0;
+    const delayBetweenMembers = 1000; // 1 second between each member
+
+    for (const [userId, member] of members) {
+      try {
+        const sent = await sendWelcomeDMToExistingMember(member, discordRecord, discordRecord.project);
+        if (sent) {
+          successCount++;
+        }
+        processedCount++;
+
+        // Log progress every 10 members
+        if (processedCount % 10 === 0) {
+          console.log(`[AUTO_WELCOME] Progress: ${processedCount}/${members.size} processed, ${successCount} DMs sent`);
+        }
+
+        // Add delay to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, delayBetweenMembers));
+
+      } catch (error) {
+        console.error(`[AUTO_WELCOME] Error processing member ${member.user.tag}:`, error);
+        processedCount++;
+      }
+    }
+
+    console.log(`[AUTO_WELCOME] Completed processing for guild ${guild.name}. Processed: ${processedCount}, DMs sent: ${successCount}`);
+
+  } catch (error) {
+    console.error(`[AUTO_WELCOME] Error processing existing members for guild ${guild.id}:`, error);
+  }
+}
+
+/**
+ * Debug function to test credential saving functionality
+ * This can be called manually for testing purposes
+ */
+async function testCredentialSaving(userId: string, guildId: string): Promise<void> {
+  console.log(`[TEST_CREDENTIALS] Testing credential saving for user ${userId} in guild ${guildId}`);
+  
+  const testProfile: UserProfileData = {
+    userId: userId,
+    guildId: guildId,
+    contributorType: 'scientist',
+    credentials: {
+      linkedin: 'https://linkedin.com/in/testuser',
+      github: 'https://github.com/testuser',
+      scholar: 'https://scholar.google.com/citations?user=testuser',
+      orcid: 'https://orcid.org/0000-0000-0000-0000',
+      twitter: 'https://twitter.com/testuser',
+      other: 'https://arxiv.org/abs/2301.00000; https://researchgate.net/profile/testuser'
+    },
+    description: 'Test scientist profile',
+    onboardingStep: 3,
+    lastInteraction: new Date(),
+    isComplete: true
+  };
+  
+  try {
+    await saveUserProfileToDatabase(testProfile);
+    console.log(`[TEST_CREDENTIALS] Test completed successfully`);
+  } catch (error) {
+    console.error(`[TEST_CREDENTIALS] Test failed:`, error);
+  }
+}
+
+// Export the test function for manual testing
+// Uncomment the line below to enable manual testing
+// export { testCredentialSaving };

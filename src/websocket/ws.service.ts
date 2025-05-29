@@ -2391,13 +2391,11 @@ I'll help you track these metrics and provide strategies to achieve them.`;
       // Record that we've sent this level-up notification
       recordLevelUpSent(userId, newLevel);
 
-      // Send email notification
-      if (project.members[0].bioUser.email) {
-        try {
-          await sendLevelUpEmail(project.members[0].bioUser.email, newLevel);
-        } catch (error) {
-          console.error(`Error sending level up email to ${project.members[0].bioUser.email}:`, error);
-        }
+      // Send email notifications to all project members
+      try {
+        await sendLevelUpEmailsToAllMembers(project, newLevel);
+      } catch (error) {
+        console.error(`Error sending level up emails for project ${userId}:`, error);
       }
     }
     // Level 3 to Level 4: Need 10+ members, 25+ papers, 100+ messages
@@ -3027,6 +3025,40 @@ async function sendLevelUpEmail(userEmail: string, level: number) {
   } catch (error) {
     console.error(`Error sending level up email to ${userEmail}:`, error);
     throw error;
+  }
+}
+
+/**
+ * Send level-up emails to all project members
+ * @param project Project with members data
+ * @param level The new level reached
+ */
+async function sendLevelUpEmailsToAllMembers(project: any, level: number): Promise<void> {
+  if (!project.members || project.members.length === 0) {
+    console.warn(`No members found for project ${project.id}, skipping level-up emails`);
+    return;
+  }
+
+  const emailPromises: Promise<void>[] = [];
+  
+  for (const member of project.members) {
+    if (member.bioUser && member.bioUser.email) {
+      const emailPromise = sendLevelUpEmail(member.bioUser.email, level)
+        .catch(error => {
+          console.error(`Error sending level up email to ${member.bioUser.email} for project ${project.id}:`, error);
+          // Don't throw here, we want to continue sending to other members
+        });
+      emailPromises.push(emailPromise);
+    } else {
+      console.warn(`Member ${member.id} in project ${project.id} has no email address, skipping level-up email`);
+    }
+  }
+
+  try {
+    await Promise.all(emailPromises);
+    console.log(`Level-up emails sent to ${emailPromises.length} members for project ${project.id} reaching level ${level}`);
+  } catch (error) {
+    console.error(`Error sending some level-up emails for project ${project.id}:`, error);
   }
 }
 
