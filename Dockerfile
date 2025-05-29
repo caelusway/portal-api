@@ -26,19 +26,27 @@ RUN apt-get update && \
         libxss1 \
         libxtst6 \
         xdg-utils \
+        openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
+COPY prisma ./prisma/
 
-# Install Node.js dependencies
+# Install ALL dependencies first (including dev dependencies for build)
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build the application
+RUN npm run build
+
+# Remove dev dependencies and reinstall only production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy application code
+# Copy application code (after build to avoid rebuilding when code changes)
 COPY . .
-
-# Build the application if needed
-RUN npm run build 2>/dev/null || echo "No build script found"
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser -s /bin/false appuser && \

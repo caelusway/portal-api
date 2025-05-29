@@ -18,7 +18,11 @@
     "update-last-activity": "ts-node src/scripts/update-last-activity.ts",
     "check-db": "ts-node src/scripts/check-db-schema.ts",
     "check-google": "ts-node src/scripts/check-google-credentials.ts",
-    "delete-unnamed-projects": "ts-node src/scripts/delete-unnamed-projects.ts"
+    "delete-unnamed-projects": "ts-node src/scripts/delete-unnamed-projects.ts",
+    "migrate:scientists": "ts-node src/scripts/migrate-verified-scientists.ts",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy"
   },
   "keywords": [
     "biodao",
