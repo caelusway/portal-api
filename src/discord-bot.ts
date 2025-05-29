@@ -1896,8 +1896,87 @@ async function saveUserProfileToDatabase(profileData: UserProfileData): Promise<
     }
 
     console.log(`[PROFILE_SAVE] Successfully saved complete profile for Discord member ${profileData.userId}`);
+    
+    // Update verifiedScientistCount if this is a scientist with scientific credentials
+    await updateVerifiedScientistCount(profileData, existingMember, memberRecord, discordRecord);
+    
   } catch (error) {
     console.error(`[PROFILE_SAVE] Error saving Discord member to database:`, error);
+  }
+}
+
+/**
+ * Updates the verifiedScientistCount in the Project table when a scientist completes onboarding
+ */
+async function updateVerifiedScientistCount(
+  profileData: UserProfileData, 
+  existingMember: any, 
+  memberRecord: any, 
+  discordRecord: any
+): Promise<void> {
+  try {
+    // Check if user previously had scientific credentials
+    const hadScientificCredentials = existingMember && 
+                                   existingMember.isOnboarded && 
+                                   (existingMember.scientificProfileUrl || 
+                                    (existingMember.scientificProfiles && existingMember.scientificProfiles.length > 0));
+    
+    // Check if user currently has scientific credentials
+    const hasScientificCredentials = !!(
+      profileData.credentials?.scholar || 
+      profileData.credentials?.orcid || 
+      profileData.credentials?.other
+    );
+    
+    // Get the project
+    const project = await prisma.project.findUnique({
+      where: { id: discordRecord.projectId }
+    });
+    
+    if (!project) {
+      console.error(`[VERIFIED_SCIENTIST] Project not found for ID: ${discordRecord.projectId}`);
+      return;
+    }
+    
+    let countChange = 0;
+    
+    // Case 1: New verified scientist (gained scientific credentials)
+    if (hasScientificCredentials && !hadScientificCredentials) {
+      countChange = 1;
+      console.log(`[VERIFIED_SCIENTIST] New verified scientist detected: ${profileData.userId}`);
+    }
+    // Case 2: Lost scientific credentials (was verified but no longer)
+    else if (hadScientificCredentials && !hasScientificCredentials) {
+      countChange = -1;
+      console.log(`[VERIFIED_SCIENTIST] Scientific credentials removed: ${profileData.userId}`);
+    }
+    // Case 3: No change needed
+    else {
+      console.log(`[VERIFIED_SCIENTIST] No count change needed for ${profileData.userId} (had credentials: ${!!hadScientificCredentials}, has credentials: ${hasScientificCredentials})`);
+      return;
+    }
+    
+    // Update the count
+    const newCount = Math.max(0, project.verifiedScientistCount + countChange); // Ensure count doesn't go below 0
+    
+    await prisma.project.update({
+      where: { id: discordRecord.projectId },
+      data: { 
+        verifiedScientistCount: newCount,
+        updatedAt: new Date()
+      }
+    });
+    
+    const changeText = countChange > 0 ? 'increased' : 'decreased';
+    console.log(`[VERIFIED_SCIENTIST] ✅ ${changeText} verifiedScientistCount for project ${project.projectName || project.id}: ${project.verifiedScientistCount} → ${newCount}`);
+    console.log(`[VERIFIED_SCIENTIST] User ${profileData.userId} credentials: ${JSON.stringify({
+      scholar: !!profileData.credentials?.scholar,
+      orcid: !!profileData.credentials?.orcid,
+      other: !!profileData.credentials?.other
+    })}`);
+    
+  } catch (error) {
+    console.error(`[VERIFIED_SCIENTIST] Error updating verifiedScientistCount:`, error);
   }
 }
 
@@ -2864,7 +2943,26 @@ async function testCredentialSaving(userId: string, guildId: string): Promise<vo
   };
   
   try {
+    // Get project count before
+    const discordRecord = await prisma.discord.findFirst({
+      where: { serverId: guildId },
+      include: { project: true }
+    });
+    
+    const beforeCount = discordRecord?.project?.verifiedScientistCount || 0;
+    console.log(`[TEST_CREDENTIALS] verifiedScientistCount before: ${beforeCount}`);
+    
     await saveUserProfileToDatabase(testProfile);
+    
+    // Get project count after
+    const updatedProject = await prisma.project.findUnique({
+      where: { id: discordRecord?.projectId || '' }
+    });
+    
+    const afterCount = updatedProject?.verifiedScientistCount || 0;
+    console.log(`[TEST_CREDENTIALS] verifiedScientistCount after: ${afterCount}`);
+    console.log(`[TEST_CREDENTIALS] Count increased by: ${afterCount - beforeCount}`);
+    
     console.log(`[TEST_CREDENTIALS] Test completed successfully`);
   } catch (error) {
     console.error(`[TEST_CREDENTIALS] Test failed:`, error);
@@ -2874,3 +2972,130 @@ async function testCredentialSaving(userId: string, guildId: string): Promise<vo
 // Export the test function for manual testing
 // Uncomment the line below to enable manual testing
 // export { testCredentialSaving };
+
+/**
+ * Migration function to count existing verified scientists and update Project table
+ * This should be run once to backfill verifiedScientistCount for existing users
+ */
+async function migrateExistingVerifiedScientists(): Promise<void> {
+  console.log(`[MIGRATE_SCIENTISTS] Starting migration to count existing verified scientists...`);
+  
+  try {
+    // Get all onboarded Discord members with scientific credentials
+    const existingMembers = await prisma.discordMember.findMany({
+      where: {
+        isOnboarded: true,
+        OR: [
+          { scientificProfileUrl: { not: null } },
+          { scientificProfiles: { some: {} } } // Has at least one scientific profile
+        ]
+      },
+      include: {
+        scientificProfiles: true,
+        discord: {
+          include: {
+            project: true
+          }
+        }
+      }
+    });
+
+    console.log(`[MIGRATE_SCIENTISTS] Found ${existingMembers.length} existing members with scientific credentials`);
+
+    // Group members by project
+    const projectCounts = new Map<string, {
+      projectId: string,
+      projectName: string | null,
+      count: number,
+      members: string[]
+    }>();
+
+    for (const member of existingMembers) {
+      const projectId = member.discord.project.id;
+      const projectName = member.discord.project.projectName;
+      
+      if (!projectCounts.has(projectId)) {
+        projectCounts.set(projectId, {
+          projectId,
+          projectName,
+          count: 0,
+          members: []
+        });
+      }
+      
+      const projectData = projectCounts.get(projectId)!;
+      projectData.count += 1;
+      projectData.members.push(`${member.discordUsername} (${member.discordId})`);
+    }
+
+    console.log(`[MIGRATE_SCIENTISTS] Found verified scientists across ${projectCounts.size} projects:`);
+    
+    // Update each project's verifiedScientistCount
+    let totalUpdated = 0;
+    
+    for (const [projectId, data] of projectCounts) {
+      try {
+        // Get current count
+        const currentProject = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { verifiedScientistCount: true, projectName: true }
+        });
+
+        if (!currentProject) {
+          console.error(`[MIGRATE_SCIENTISTS] Project not found: ${projectId}`);
+          continue;
+        }
+
+        const oldCount = currentProject.verifiedScientistCount;
+        const newCount = data.count;
+
+        // Update the project
+        await prisma.project.update({
+          where: { id: projectId },
+          data: { 
+            verifiedScientistCount: newCount,
+            updatedAt: new Date()
+          }
+        });
+
+        console.log(`[MIGRATE_SCIENTISTS] ✅ Updated project "${data.projectName || projectId}": ${oldCount} → ${newCount} verified scientists`);
+        console.log(`[MIGRATE_SCIENTISTS]   Members: ${data.members.join(', ')}`);
+        
+        totalUpdated++;
+      } catch (error) {
+        console.error(`[MIGRATE_SCIENTISTS] Error updating project ${projectId}:`, error);
+      }
+    }
+
+    console.log(`[MIGRATE_SCIENTISTS] ✅ Migration completed! Updated ${totalUpdated} projects with verified scientist counts.`);
+    
+    // Summary
+    const totalScientists = Array.from(projectCounts.values()).reduce((sum, data) => sum + data.count, 0);
+    console.log(`[MIGRATE_SCIENTISTS] Summary: ${totalScientists} verified scientists across ${totalUpdated} projects`);
+
+  } catch (error) {
+    console.error(`[MIGRATE_SCIENTISTS] Migration failed:`, error);
+  }
+}
+
+/**
+ * Function to run the migration - can be called manually or via API endpoint
+ */
+async function runScientistMigration(): Promise<{ success: boolean, message: string }> {
+  try {
+    await migrateExistingVerifiedScientists();
+    return { 
+      success: true, 
+      message: "Migration completed successfully. Check logs for details." 
+    };
+  } catch (error) {
+    console.error(`[MIGRATION_RUNNER] Error:`, error);
+    return { 
+      success: false, 
+      message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    };
+  }
+}
+
+// Export the migration function for running the backfill
+export { runScientistMigration, migrateExistingVerifiedScientists };
