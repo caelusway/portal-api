@@ -14,6 +14,7 @@ import {
   ButtonStyle,
   Interaction,
   Attachment,
+  EmbedBuilder,
 } from 'discord.js';
 import axios from 'axios';
 import dotenv from 'dotenv';
@@ -226,16 +227,14 @@ function isLowValueMessage(content: string): boolean {
   // Normalize the content
   const normalizedContent = content.toLowerCase().trim();
   
-  // Skip messages that are too short
-  if (normalizedContent.length < 5) {
+  // Skip messages that are too short (reduced from 5 to 3)
+  if (normalizedContent.length < 3) {
     return true;
   }
   
-  // Common greetings and basic responses
+  // Only filter out very basic greetings and responses
   const lowValuePatterns = [
-    /^(hi|hey|hello|sup|yo|gm|good morning|good evening|good night|gn|bye)$/i,
-    /^(what'?s up|how are you|how's it going)$/i,
-    /^(nice|cool|great|awesome|amazing|good|bad|sad|happy)$/i,
+    /^(hi|hey|hello|sup|yo|gm|gn|bye)$/i,
     /^((?:ha){1,5})$/i, // matches: ha, haha, hahaha, etc.
     /^[👋👍👎❤️😂🙏]+$/u, // just emojis
   ];
@@ -247,11 +246,8 @@ function isLowValueMessage(content: string): boolean {
     }
   }
   
-  // Count words - messages with only 1-2 words are usually low value
-  const wordCount = normalizedContent.split(/\s+/).filter((word) => word.length > 0).length;
-  if (wordCount <= 2) {
-    return true;
-  }
+  // Removed the word count restriction - allow short but meaningful messages
+  // Old code: if (wordCount <= 2) return true;
   
   // Not a low-value message
   return false;
@@ -316,6 +312,33 @@ client.once(Events.ClientReady, async () => {
           type: 3, // STRING type
           required: true,
         },
+      ],
+    },
+    // New /leaderboard command
+    {
+      name: 'leaderboard',
+      description: 'Show community leaderboard and stats',
+      options: [
+        {
+          name: 'type',
+          description: 'Type of leaderboard to display',
+          type: 3, // STRING type
+          required: false,
+          choices: [
+            {
+              name: 'Papers Shared',
+              value: 'papers'
+            },
+            {
+              name: 'Community Points',
+              value: 'messages'
+            },
+            {
+              name: 'Overall Stats',
+              value: 'stats'
+            }
+          ]
+        }
       ],
     },
   ];
@@ -756,7 +779,7 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
     // Use the ws.service handler to process the event and notify users
     await wsService.handleGuildCreate(guild.id, guild.name, guild.memberCount);
     
-    console.log(`[Discord Bot] handleGuildCreate completed for guild ${guild.id}`);
+    console.log(`[Discord] handleGuildCreate completed for guild ${guild.id}`);
   } catch (error) {
     console.error(`[Discord Bot - GuildCreate] Error calling wsService.handleGuildCreate for guild ${guild.id}:`, error);
     // Even if there's an error with the WebSocket service, still try to notify the Portal API
@@ -767,7 +790,7 @@ client.on(Events.GuildCreate, async (guild: Guild) => {
     console.log(`[Discord Bot - GuildCreate] Notifying Portal API about new guild ${guild.id}`);
     await notifyPortalAPI(guild.id, 'guildCreate');
 
-    console.log(`[Discord Bot] Portal API notification completed for guild ${guild.id}`);
+    console.log(`[Discord] Portal API notification completed for guild ${guild.id}`);
   } catch (apiError) {
     console.error(`[Discord Bot - GuildCreate] Error notifying Portal API for guild ${guild.id}:`, apiError);
   }
@@ -900,6 +923,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
   const guildId = message.guild?.id;
   if (!guildId) return;
   
+  console.log(`[MESSAGE_RECEIVED] Message from ${message.author.tag} in guild ${guildId}: "${message.content}"`);
+  
   // Initialize stats tracking if needed
   const stats = guildStats.get(guildId);
   if (!stats) {
@@ -981,6 +1006,16 @@ client.on(Events.MessageCreate, async (message: Message) => {
     console.log(`[PAPER_TRACK] Paper count increased by ${detectedPapers.length} to ${updatedStats.papersShared} in guild ${guildId}`);
     papersSharedByGuild[guildId] = updatedStats.papersShared;
     
+    // Update individual member paper count in DiscordMember table
+    try {
+      await updateMemberActivityStats(message.author.id, guildId, 'paper_shared', {
+        papersCount: detectedPapers.length
+      });
+      console.log(`[MEMBER_PAPER_TRACK] Updated member paper count for ${message.author.tag} in guild ${guildId}`);
+    } catch (memberError) {
+      console.error(`[MEMBER_PAPER_TRACK] Error updating member paper count:`, memberError);
+    }
+    
     try {
       if (discordRecord) {
         // Update the paper count in the database
@@ -1002,6 +1037,8 @@ client.on(Events.MessageCreate, async (message: Message) => {
   
   // Skip low value messages for count, but still process papers
   const isLowValue = isLowValueMessage(message.content);
+  console.log(`[MESSAGE_FILTER] Message "${message.content}" from ${message.author.tag} - Low value: ${isLowValue}`);
+  
   if (!isLowValue) {
     // Increment message count
     updatedStats.messageCount += 1;
@@ -1013,6 +1050,18 @@ client.on(Events.MessageCreate, async (message: Message) => {
     
     // Update last message timestamp
     updatedStats.lastMessageTimestamp = new Date();
+    
+    // Update individual member message count in DiscordMember table
+    try {
+      console.log(`[MEMBER_MESSAGE_TRACK] Attempting to update member stats for ${message.author.tag}`);
+      await updateMemberActivityStats(message.author.id, guildId, 'message_sent', {
+        messagesCount: 1,
+        isLowValue: false
+      });
+      console.log(`[MEMBER_MESSAGE_TRACK] Successfully updated member message count for ${message.author.tag} in guild ${guildId}`);
+    } catch (memberError) {
+      console.error(`[MEMBER_MESSAGE_TRACK] Error updating member message count:`, memberError);
+    }
     
     try {
       // Update the message count in the database
@@ -1137,8 +1186,156 @@ async function savePaperToDatabase(
     });
     
     console.log(`[PAPER_SAVE] Successfully saved paper: ${paperMetadata.url} by ${message.author.tag}`);
+    
+    // Update member's paper contribution count
+    await updateMemberActivityStats(message.author.id, discordRecord.serverId, 'paper_shared', {
+      papersCount: 1
+    });
+    
   } catch (error) {
     console.error(`[PAPER_SAVE] Error saving paper to database:`, error);
+  }
+}
+
+/**
+ * Update DiscordMember activity stats when they send messages or share papers
+ */
+async function updateMemberActivityStats(
+  discordId: string,
+  serverId: string,
+  activityType: 'message_sent' | 'paper_shared',
+  metadata: {
+    messagesCount?: number;
+    papersCount?: number;
+    qualityScore?: number;
+    isLowValue?: boolean;
+  }
+): Promise<void> {
+  try {
+    console.log(`[MEMBER_ACTIVITY] Updating stats for ${discordId} in server ${serverId}, activity: ${activityType}`);
+    
+    // Find or create the Discord member record
+    let member = await prisma.discordMember.findFirst({
+      where: {
+        discordId: discordId,
+        discordServerId: serverId
+      }
+    });
+
+    if (!member) {
+      console.log(`[MEMBER_ACTIVITY] Member ${discordId} not found, creating new record`);
+      // Get user info from Discord client
+      let discordUser;
+      try {
+        discordUser = await client.users.fetch(discordId);
+      } catch (error) {
+        console.error(`[MEMBER_ACTIVITY] Error fetching Discord user ${discordId}:`, error);
+      }
+
+      member = await prisma.discordMember.create({
+        data: {
+          discordId: discordId,
+          discordUsername: discordUser?.tag || discordId,
+          discordAvatar: discordUser?.displayAvatarURL() || null,
+          discordServerId: serverId,
+          linkedinUrl: null,
+          scientificProfileUrl: null,
+          motivationToJoin: null,
+          isOnboarded: false,
+          paperContributions: 0,
+          messageCount: 0,
+          totalPoints: 0,
+          messagePoints: 0,
+          paperPoints: 0,
+          qualityMultiplier: 1.0,
+          streak: 0,
+          lastActivityDate: new Date(),
+          weeklyPoints: 0,
+          monthlyPoints: 0
+        }
+      });
+    }
+
+    // Calculate points based on activity type
+    let pointsToAdd = 0;
+    let updateData: any = {
+      lastActivityDate: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (activityType === 'message_sent' && metadata.messagesCount) {
+      // Message activity
+      const baseMessagePoints = metadata.isLowValue ? 0 : 1; // No points for low-value messages
+      const qualityBonus = metadata.qualityScore ? Math.floor(metadata.qualityScore / 20) : 0; // Bonus points for high quality
+      pointsToAdd = (baseMessagePoints + qualityBonus) * member.qualityMultiplier;
+      
+      updateData.messageCount = { increment: metadata.messagesCount };
+      updateData.messagePoints = { increment: pointsToAdd };
+      
+      console.log(`[MEMBER_ACTIVITY] Message activity: base=${baseMessagePoints}, quality=${qualityBonus}, multiplier=${member.qualityMultiplier}, total=${pointsToAdd}`);
+    }
+
+    if (activityType === 'paper_shared' && metadata.papersCount) {
+      // Paper sharing activity (higher value)
+      const basePaperPoints = 10; // Base points for sharing a paper
+      pointsToAdd = basePaperPoints * member.qualityMultiplier;
+      
+      updateData.paperContributions = { increment: metadata.papersCount };
+      updateData.paperPoints = { increment: pointsToAdd };
+      
+      console.log(`[MEMBER_ACTIVITY] Paper activity: base=${basePaperPoints}, multiplier=${member.qualityMultiplier}, total=${pointsToAdd}`);
+    }
+
+    // Update total points
+    if (pointsToAdd > 0) {
+      updateData.totalPoints = { increment: pointsToAdd };
+      updateData.weeklyPoints = { increment: pointsToAdd };
+      updateData.monthlyPoints = { increment: pointsToAdd };
+    }
+
+    // Update streak logic
+    const now = new Date();
+    const lastActivity = member.lastActivityDate;
+    const daysSinceLastActivity = lastActivity ? Math.floor((now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+    
+    if (daysSinceLastActivity === 1) {
+      // Consecutive day activity - increment streak
+      updateData.streak = { increment: 1 };
+    } else if (daysSinceLastActivity > 1) {
+      // Gap in activity - reset streak
+      updateData.streak = 1;
+    }
+    // If daysSinceLastActivity === 0 (same day), don't change streak
+
+    // Apply updates to database
+    const updatedMember = await prisma.discordMember.update({
+      where: { id: member.id },
+      data: updateData
+    });
+
+    console.log(`[MEMBER_ACTIVITY] Updated member ${discordId}: messages=${updatedMember.messageCount}, papers=${updatedMember.paperContributions}, totalPoints=${updatedMember.totalPoints}, streak=${updatedMember.streak}`);
+
+    // Log activity to MemberActivity table for detailed tracking
+    if (pointsToAdd > 0) {
+      await prisma.memberActivity.create({
+        data: {
+          memberId: member.id,
+          activityType: activityType,
+          points: pointsToAdd,
+          description: activityType === 'message_sent' ? 
+            `Sent ${metadata.isLowValue ? 'low-value' : 'quality'} message` : 
+            'Shared research paper',
+          metadata: {
+            qualityScore: metadata.qualityScore,
+            isLowValue: metadata.isLowValue,
+            serverId: serverId
+          }
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error(`[MEMBER_ACTIVITY] Error updating member activity stats:`, error);
   }
 }
 
@@ -2383,6 +2580,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       case 'ask':
         await handleAskCommand(interaction);
         break;
+      case 'leaderboard':
+        await handleLeaderboardCommand(interaction);
+        break;
       default:
         await interaction.reply({ content: 'Unknown command', ephemeral: true });
     }
@@ -3099,3 +3299,474 @@ async function runScientistMigration(): Promise<{ success: boolean, message: str
 
 // Export the migration function for running the backfill
 export { runScientistMigration, migrateExistingVerifiedScientists };
+
+async function handleLeaderboardCommand(interaction: ChatInputCommandInteraction) {
+  console.log(`[Leaderboard] Handling interaction for user ${interaction.user.id} in guild ${interaction.guildId}`);
+  
+  try {
+    await interaction.deferReply();
+    
+    const type = interaction.options.getString('type') || 'stats';
+    const guildId = interaction.guildId;
+    
+    if (!guildId) {
+      await interaction.editReply('This command can only be used in a server.');
+      return;
+    }
+
+    // Get guild and project info
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      await interaction.editReply('Server not found.');
+      return;
+    }
+
+    const discordRecord = await prisma.discord.findFirst({
+      where: { serverId: guildId },
+      include: { project: true }
+    });
+
+    if (!discordRecord) {
+      await interaction.editReply('This server is not registered with BioDAO. Please contact an administrator.');
+      return;
+    }
+
+    let embed: EmbedBuilder;
+
+    switch (type) {
+      case 'papers':
+        embed = await createPapersLeaderboard(guildId, guild.name, discordRecord);
+        break;
+      case 'messages':
+        embed = await createMessagesLeaderboard(guildId, guild.name, discordRecord);
+        break;
+      case 'stats':
+      default:
+        embed = await createStatsLeaderboard(guildId, guild.name, discordRecord);
+        break;
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    console.log(`[Leaderboard] Successfully sent ${type} leaderboard for guild ${guildId}`);
+
+  } catch (error) {
+    console.error(`[Leaderboard] Error handling command:`, error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply('Sorry, an error occurred while generating the leaderboard.');
+    } else {
+      await interaction.reply({ content: 'Sorry, an error occurred while generating the leaderboard.', ephemeral: true });
+    }
+  }
+}
+
+async function createStatsLeaderboard(guildId: string, guildName: string, discordRecord: any): Promise<EmbedBuilder> {
+  const embed = new EmbedBuilder()
+    .setTitle(`📊 ${guildName} Community Stats`)
+    .setColor('#0099ff')
+    .setTimestamp();
+
+  // Get current stats
+  const stats = guildStats.get(guildId);
+  const guild = client.guilds.cache.get(guildId);
+  
+  const messageCount = discordRecord.messagesCount || 0;
+  const papersShared = discordRecord.papersShared || 0;
+  const qualityScore = discordRecord.qualityScore || 50;
+  const memberCount = guild?.memberCount || 0;
+  const activeUsers = stats?.activeUsers.size || 0;
+
+  // Project info with better formatting
+  const project = discordRecord.project;
+  if (project) {
+    const projectInfo = `🧬 **${project.projectName || 'BioDAO Community'}**\n\n🔬 **Verified Scientists:** ${project.verifiedScientistCount || 0}\n📊 **Community Growth:** Active & Engaged`;
+    
+    embed.addFields({
+      name: '🚀 Project Overview',
+      value: projectInfo,
+      inline: false
+    });
+
+    // Add spacing separator
+    embed.addFields({
+      name: '\u200B',
+      value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      inline: false
+    });
+  }
+
+  // Community metrics with enhanced formatting
+  const communityStats = `👥 **Total Members:** ${memberCount}\n🟢 **Active Users:** ${activeUsers}\n📈 **Engagement Level:** ${activeUsers > 0 ? Math.round((activeUsers / memberCount) * 100) : 0}%`;
+  const activityStats = `💬 **Messages Sent:** ${messageCount}\n⭐ **Quality Score:** ${qualityScore}/100\n📊 **Activity Rating:** ${qualityScore >= 75 ? 'Excellent' : qualityScore >= 50 ? 'Good' : 'Improving'}`;
+  const researchStats = `📄 **Papers Shared:** ${papersShared}\n📚 **Research Density:** ${memberCount > 0 ? (papersShared / memberCount).toFixed(1) : '0'} per member\n🎯 **Knowledge Score:** ${papersShared >= 10 ? 'High' : papersShared >= 5 ? 'Medium' : 'Growing'}`;
+
+  embed.addFields(
+    {
+      name: '👥 Community',
+      value: communityStats,
+      inline: true
+    },
+    {
+      name: '💬 Activity',
+      value: activityStats,
+      inline: true
+    },
+    {
+      name: '📄 Research',
+      value: researchStats,
+      inline: true
+    }
+  );
+
+  // Add spacing separator
+  embed.addFields({
+    name: '\u200B',
+    value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    inline: false
+  });
+
+  // Get top contributors with better formatting
+  try {
+    const topPaperContributors = await prisma.discordMember.findMany({
+      where: { discordServerId: guildId },
+      orderBy: { paperContributions: 'desc' },
+      take: 3,
+      select: {
+        discordUsername: true,
+        paperContributions: true,
+        scientificProfiles: true
+      }
+    });
+
+    const topMessageContributors = await prisma.discordMember.findMany({
+      where: { discordServerId: guildId },
+      orderBy: { totalPoints: 'desc' },
+      take: 3,
+      select: {
+        discordUsername: true,
+        messageCount: true,
+        totalPoints: true
+      }
+    });
+
+    if (topPaperContributors.length > 0) {
+      const paperLeaders = topPaperContributors
+        .filter(member => member.paperContributions > 0)
+        .map((member, index) => {
+          const medal = ['🥇', '🥈', '🥉'][index] || '🏅';
+          const scientistBadge = member.scientificProfiles && member.scientificProfiles.length > 0 ? ' 🔬' : '';
+          return `${medal} **${member.discordUsername}**${scientistBadge}\n     📄 ${member.paperContributions} papers shared`;
+        }).join('\n\n') || '📭 No paper contributions yet';
+      
+      embed.addFields({
+        name: '🏆 Top Research Contributors',
+        value: paperLeaders,
+        inline: false
+      });
+    }
+
+    if (topMessageContributors.length > 0) {
+      const messageLeaders = topMessageContributors
+        .filter(member => member.totalPoints > 0)
+        .map((member, index) => {
+          const medal = ['🥇', '🥈', '🥉'][index] || '🏅';
+          return `${medal} **${member.discordUsername}**\n     🎯 ${member.totalPoints} pts (${member.messageCount} messages)`;
+        }).join('\n\n') || '📭 No points earned yet';
+      
+      embed.addFields({
+        name: '🏆 Top Point Earners',
+        value: messageLeaders,
+        inline: false
+      });
+    }
+  } catch (error) {
+    console.error('[Leaderboard] Error fetching top contributors:', error);
+  }
+
+  // Add final spacing separator
+  embed.addFields({
+    name: '\u200B',
+    value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    inline: false
+  });
+
+  embed.setFooter({
+    text: `💡 Use /leaderboard type:papers or /leaderboard type:messages for detailed points rankings`
+  });
+
+  return embed;
+}
+
+async function createPapersLeaderboard(guildId: string, guildName: string, discordRecord: any): Promise<EmbedBuilder> {
+  const embed = new EmbedBuilder()
+    .setTitle(`📄 ${guildName} Paper Contributions`)
+    .setColor('#00ff99')
+    .setTimestamp();
+
+  try {
+    // Get top paper contributors
+    const topContributors = await prisma.discordMember.findMany({
+      where: { 
+        discordServerId: guildId,
+        paperContributions: { gt: 0 }
+      },
+      orderBy: { paperContributions: 'desc' },
+      take: 10,
+      select: {
+        discordUsername: true,
+        discordId: true,
+        paperContributions: true,
+        scientificProfiles: {
+          select: {
+            platform: true,
+            url: true
+          }
+        }
+      }
+    });
+
+    if (topContributors.length === 0) {
+      embed.setDescription('📭 No paper contributions recorded yet!\n\n💡 Share research papers to get on the leaderboard:\n• Upload PDF attachments\n• Share links from arXiv, Nature, PubMed, etc.\n• Post DOI links or research URLs');
+      return embed;
+    }
+
+    // Get recent papers shared
+    const recentPapers = await prisma.discordPaper.findMany({
+      where: { discordId: discordRecord.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        title: true,
+        platform: true,
+        username: true,
+        createdAt: true
+      }
+    });
+
+    // Create enhanced leaderboard text with better spacing
+    const leaderboardText = topContributors.map((contributor, index) => {
+      const medal = ['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`;
+      const scientistBadge = contributor.scientificProfiles.length > 0 ? ' 🔬' : '';
+      const platformCount = contributor.scientificProfiles.length;
+      const profileText = platformCount > 0 ? `\n     └ ${platformCount} scientific profile${platformCount > 1 ? 's' : ''}` : '';
+      
+      return `${medal} **${contributor.discordUsername}**${scientistBadge}\n     📄 **${contributor.paperContributions} papers shared**${profileText}`;
+    }).join('\n\n');
+
+    embed.addFields({
+      name: '🏆 Top Paper Contributors',
+      value: leaderboardText,
+      inline: false
+    });
+
+    // Add recent papers if available with better formatting
+    if (recentPapers.length > 0) {
+      // Add spacing separator
+      embed.addFields({
+        name: '\u200B',
+        value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        inline: false
+      });
+
+      const recentPapersText = recentPapers.map((paper, index) => {
+        const title = paper.title ? (paper.title.length > 45 ? paper.title.substring(0, 45) + '...' : paper.title) : 'Untitled Paper';
+        const platform = paper.platform ? ` • ${paper.platform}` : '';
+        const timeAgo = getTimeAgo(paper.createdAt);
+        
+        return `**${index + 1}.** ${title}${platform}\n     👤 by ${paper.username}  •  🕒 ${timeAgo}`;
+      }).join('\n\n');
+
+      embed.addFields({
+        name: '📋 Recently Shared Papers',
+        value: recentPapersText,
+        inline: false
+      });
+    }
+
+    // Enhanced stats with better formatting
+    const totalPapers = discordRecord.papersShared || 0;
+    const avgPerMember = topContributors.length > 0 ? (totalPapers / topContributors.length).toFixed(1) : '0';
+    const topSharer = topContributors[0]?.paperContributions || 0;
+
+    const statsText = `📄 **Total Papers:** ${totalPapers}\n🏅 **Top Contributor:** ${topSharer} papers\n📊 **Avg per Contributor:** ${avgPerMember}`;
+
+    embed.addFields({
+      name: '📊 Paper Statistics',
+      value: statsText,
+      inline: true
+    });
+
+    // Add final spacing separator
+    embed.addFields({
+      name: '\u200B',
+      value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      inline: false
+    });
+
+    // Enhanced legend
+    embed.addFields({
+      name: '🏷️ Legend & Tips',
+      value: '🔬 Verified Scientist with Scientific Profiles\n\n💡 **Share papers by:**\n• Uploading PDFs  •  Posting research URLs  •  Sharing DOI links',
+      inline: false
+    });
+
+  } catch (error) {
+    console.error('[Leaderboard] Error creating papers leaderboard:', error);
+    embed.setDescription('❌ Error loading paper contributions. Please try again later.');
+  }
+
+  return embed;
+}
+
+async function createMessagesLeaderboard(guildId: string, guildName: string, discordRecord: any): Promise<EmbedBuilder> {
+  const embed = new EmbedBuilder()
+    .setTitle(`🏆 ${guildName} Community Points Leaderboard`)
+    .setColor('#ffd700')
+    .setTimestamp();
+
+  try {
+    // Get top point earners
+    console.log(`[LEADERBOARD_DEBUG] Querying members for guild ${guildId}`);
+    const topContributors = await prisma.discordMember.findMany({
+      where: { 
+        discordServerId: guildId
+      },
+      orderBy: { totalPoints: 'desc' },
+      take: 10,
+      include: {
+        scientificProfiles: true
+      }
+    });
+
+    console.log(`[LEADERBOARD_DEBUG] Found ${topContributors.length} members in guild ${guildId}`);
+    topContributors.forEach((member, index) => {
+      console.log(`[LEADERBOARD_DEBUG] Member ${index + 1}: ${member.discordUsername} - Points: ${member.totalPoints}, Messages: ${member.messageCount}, Papers: ${member.paperContributions}`);
+    });
+
+    if (topContributors.length === 0) {
+      embed.setDescription('📭 No members found in this server yet!\n\n💡 Members will appear here once they:\n• Send quality messages\n• Share research papers\n• Complete their onboarding profile');
+      return embed;
+    }
+
+    // Create main leaderboard with better spacing
+    const leaderboardText = topContributors.map((contributor, index) => {
+      const medal = ['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`;
+      const scientistBadge = contributor.scientificProfiles && contributor.scientificProfiles.length > 0 ? ' 🔬' : '';
+      const onboardedBadge = contributor.isOnboarded ? ' ✅' : '';
+      const streakBadge = contributor.streak > 1 ? ` 🔥${contributor.streak}` : '';
+      
+      // Format points breakdown with better spacing
+      const totalPts = contributor.totalPoints || 0;
+      const msgPts = contributor.messagePoints || 0;
+      const paperPts = contributor.paperPoints || 0;
+      
+      let pointsDisplay = `**${totalPts} pts**`;
+      if (totalPts > 0) {
+        pointsDisplay += `\n     └ 💬 ${msgPts} pts  •  📄 ${paperPts} pts`;
+      }
+      
+      return `${medal} **${contributor.discordUsername}**${scientistBadge}${onboardedBadge}${streakBadge}\n     ${pointsDisplay}`;
+    }).join('\n\n');
+
+    embed.addFields({
+      name: '🏆 Community Rankings',
+      value: leaderboardText,
+      inline: false
+    });
+
+    // Get current stats with better formatting
+    const stats = guildStats.get(guildId);
+    const totalMessages = discordRecord.messagesCount || 0;
+    const qualityScore = discordRecord.qualityScore || 50;
+    const activeUsers = stats?.activeUsers.size || 0;
+    const totalPoints = topContributors.reduce((sum, member) => sum + (member.totalPoints || 0), 0);
+
+    // Activity stats with spacing
+    const activityStats = `📨 **Messages:** ${totalMessages}\n⭐ **Quality Score:** ${qualityScore}/100\n👥 **Active Users:** ${activeUsers}`;
+    
+    // Points overview with spacing
+    const pointsOverview = `🎯 **Total Points:** ${totalPoints}\n🏅 **Top Scorer:** ${topContributors[0]?.totalPoints || 0} pts\n🎖️ **Contributors:** ${topContributors.filter(c => (c.totalPoints || 0) > 0).length}`;
+
+    embed.addFields(
+      {
+        name: '📊 Activity Overview',
+        value: activityStats,
+        inline: true
+      },
+      {
+        name: '🎯 Points Summary',
+        value: pointsOverview,
+        inline: true
+      }
+    );
+
+    // Add spacing separator
+    embed.addFields({
+      name: '\u200B',
+      value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      inline: false
+    });
+
+    // Add top 3 details with enhanced formatting
+    if (topContributors.length > 0) {
+      const topThreeDetails = topContributors.slice(0, 3).map((contributor, index) => {
+        const medal = ['🥇', '🥈', '🥉'][index];
+        const lastActive = contributor.lastActivityDate ? getTimeAgo(contributor.lastActivityDate) : 'Unknown';
+        const scientificCount = contributor.scientificProfiles ? contributor.scientificProfiles.length : 0;
+        const platforms = scientificCount > 0 ? ` • ${scientificCount} scientific profiles` : '';
+        
+        return `${medal} **${contributor.discordUsername}**\n` +
+               `     🎯 **Total Points:** ${contributor.totalPoints || 0}\n` +
+               `     💬 Message Points: ${contributor.messagePoints || 0}\n` +
+               `     📄 Paper Points: ${contributor.paperPoints || 0}\n` +
+               `     📈 Activity: ${contributor.messageCount || 0} messages • ${contributor.paperContributions || 0} papers\n` +
+               `     🕒 Last Active: ${lastActive}${platforms}`;
+      }).join('\n\n');
+
+      embed.addFields({
+        name: '🌟 Detailed Top 3 Breakdown',
+        value: topThreeDetails,
+        inline: false
+      });
+    }
+
+    // Add final spacing separator
+    embed.addFields({
+      name: '\u200B',
+      value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      inline: false
+    });
+
+    // Enhanced legend with better formatting
+    const legendText = `🔬 Verified Scientist  •  ✅ Completed Onboarding  •  🔥 Activity Streak\n\n💬 Message Points  •  📄 Paper Points  •  🎯 Total Points`;
+    
+    embed.addFields({
+      name: '🏷️ Legend & Point System',
+      value: legendText,
+      inline: false
+    });
+
+  } catch (error) {
+    console.error('[Leaderboard] Error creating points leaderboard:', error);
+    embed.setDescription('❌ Error loading community points. Please try again later.');
+  }
+
+  return embed;
+}
+
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  if (diffDays > 0) {
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  } else if (diffHours > 0) {
+    return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  } else if (diffMinutes > 0) {
+    return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+  } else {
+    return 'Just now';
+  }
+}

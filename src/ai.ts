@@ -511,8 +511,8 @@ You're on Level 3: Community Initiated
 
 To reach Level 4, you need to:
 1. Grow your Discord community to 5+ members (you have ${project?.Discord?.memberCount || 0})
-2. Have members share 5+ scientific papers in your Discord
-3. Reach 50+ messages in your Discord
+2. Have members share 25+ scientific papers in your Discord
+3. Reach 100+ messages in your Discord
 
 Focus on scientific content sharing and encouraging discussion among members.`;
       
@@ -631,9 +631,9 @@ function getSystemPrompt(level: number, discordStats?: any, botInstallationUrl?:
 - Verification: ${discordStats.verified ? 'Complete' : 'Pending'} (Required)`;
     } else if (level === 3) {
       prompt += `\n\nCURRENT PROGRESS TOWARDS LEVEL 4:
-- Members: ${discordStats.memberCount}/10 required (${Math.min(100, Math.round((discordStats.memberCount / 5) * 100))}%)
-- Papers Shared: ${discordStats.papersShared}/25 required (${Math.min(100, Math.round((discordStats.papersShared / 5) * 100))}%)
-- Messages Sent: ${discordStats.messagesCount}/100 required (${Math.min(100, Math.round((discordStats.messagesCount / 50) * 100))}%)`;
+- Members: ${discordStats.memberCount}/10 required (${Math.min(100, Math.round((discordStats.memberCount / 10) * 100))}%)
+- Papers Shared: ${discordStats.papersShared}/25 required (${Math.min(100, Math.round((discordStats.papersShared / 25) * 100))}%)
+- Messages Sent: ${discordStats.messagesCount}/100 required (${Math.min(100, Math.round((discordStats.messagesCount / 100) * 100))}%)`;
     }
   } else if (level === 2) {
     // If level 2 but no Discord stats, replace with zeros and add note about setup

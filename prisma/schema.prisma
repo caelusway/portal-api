@@ -93,13 +93,82 @@ model DiscordMember {
   scientificProfileUrl String?
   motivationToJoin     String?
   isOnboarded          Boolean             @default(false)
-  paperContributions   Int                 @default(0)
-  messageCount         Int                 @default(0)
-  discordServerId      String
   joinedAt             DateTime            @default(now())
+  messageCount         Int                 @default(0)
+  paperContributions   Int                 @default(0)
+  
+  // Points system fields
+  totalPoints          Int                 @default(0)
+  messagePoints        Int                 @default(0)
+  paperPoints          Int                 @default(0)
+  weeklyPoints         Int                 @default(0)
+  monthlyPoints        Int                 @default(0)
+  qualityMultiplier    Float               @default(1.0)
+  rank                 Int?                @default(0)
+  streak               Int                 @default(0)
+  lastActivityDate     DateTime?
+  lastWeeklyReset      DateTime?
+  lastMonthlyReset     DateTime?
+  
+  createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
+  discordServerId      String
   discord              Discord             @relation(fields: [discordServerId], references: [serverId], onDelete: Cascade)
   scientificProfiles   ScientificProfile[]
+  activities           MemberActivity[]
+  badges               MemberBadge[]
+  messages             DiscordMessage[]
+
+  @@index([discordServerId, totalPoints])
+  @@index([discordServerId, weeklyPoints])
+  @@index([discordServerId, monthlyPoints])
+}
+
+model DiscordMessage {
+  id          String   @id @default(uuid())
+  messageId   String   @unique // Discord message ID
+  channelId   String   // Discord channel ID  
+  content     String   // Message content
+  userId      String   // Discord user ID who sent the message
+  username    String   // Discord username
+  qualityScore Int     @default(50) // Quality score of the message (0-100)
+  isLowValue  Boolean  @default(false) // Whether message is considered low-value
+  sentAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  discordId   String   // Foreign key to Discord table
+  discord     Discord  @relation(fields: [discordId], references: [id], onDelete: Cascade)
+  
+  // Optional: Link to member if available
+  memberId    String?
+  member      DiscordMember? @relation(fields: [memberId], references: [id])
+
+  @@index([discordId, sentAt])
+  @@index([userId, sentAt])
+}
+
+model MemberActivity {
+  id           String    @id @default(uuid())
+  memberId     String
+  member       DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  activityType String    // 'message_sent', 'paper_shared', 'badge_earned', etc.
+  points       Int       @default(0)
+  description  String?   // Human readable description
+  metadata     Json?     // Additional metadata about the activity
+  createdAt    DateTime  @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+model MemberBadge {
+  id        String    @id @default(uuid())
+  memberId  String
+  member    DiscordMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  badgeType String    // 'early_adopter', 'paper_expert', 'discussion_leader', etc.
+  earnedAt  DateTime  @default(now())
+
+  @@unique([memberId, badgeType]) // Prevent duplicate badges
+  @@index([memberId])
 }
 
 model ScientificProfile {
@@ -157,7 +226,10 @@ model Discord {
   projectId         String          @unique
   project           Project         @relation(fields: [projectId], references: [id])
   members           DiscordMember[]
-  papers            DiscordPaper[]  // New relation to papers
+  papers            DiscordPaper[]
+  messages          DiscordMessage[]
+
+  @@index([serverId])
 }
 
 model ChatSession {
